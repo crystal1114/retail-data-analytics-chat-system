@@ -96,7 +96,13 @@ def run_chat(
 
     import backend.app.chat_service as _self_module
     _OpenAI = getattr(_self_module, 'OpenAI')
-    client = _OpenAI(api_key=settings.openai_api_key)
+
+    # Build client kwargs — include base_url only when explicitly configured
+    client_kwargs: dict[str, Any] = {"api_key": settings.openai_api_key}
+    if settings.openai_base_url:
+        client_kwargs["base_url"] = settings.openai_base_url
+
+    client = _OpenAI(**client_kwargs)
 
     # Build full message list: system + history
     full_messages: list[dict[str, Any]] = [

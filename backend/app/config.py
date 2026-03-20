@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # ── OpenAI ──────────────────────────────────────────────────────────────
     openai_api_key: str = ""
+    openai_base_url: str = ""          # Optional: custom base URL (e.g. GenSpark proxy)
     openai_model: str = "gpt-4o-mini"
 
     # ── Database ────────────────────────────────────────────────────────────
