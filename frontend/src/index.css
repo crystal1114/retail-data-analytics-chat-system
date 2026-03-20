@@ -1,44 +1,94 @@
-/* src/index.css — Global styles */
-/* Use system fonts to avoid external network requests */
+@import "tailwindcss";
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* ─── Design Tokens ─────────────────────────────────────────────────────────── */
+@theme {
+  /* Background layers — deep navy stack */
+  --color-canvas:   #080b14;   /* page bg */
+  --color-surface:  #0d1117;   /* sidebar / header */
+  --color-panel:    #111827;   /* elevated panels */
+  --color-card:     #161d2b;   /* cards inside panels */
+  --color-overlay:  #1c2538;   /* hover / input fills */
+  --color-sunken:   #0a0f1a;   /* inset / code blocks */
+
+  /* Borders */
+  --color-border:   rgba(255,255,255,0.06);
+  --color-border-md: rgba(255,255,255,0.10);
+  --color-border-hi: rgba(255,255,255,0.16);
+
+  /* Text hierarchy */
+  --color-text-1:   #f0f4ff;   /* primary — near white */
+  --color-text-2:   #9ba8c0;   /* secondary — muted blue-gray */
+  --color-text-3:   #5b6880;   /* tertiary / hints */
+
+  /* Accent — violet-indigo */
+  --color-accent:   #7c6cfa;
+  --color-accent-hi: #9d8eff;
+  --color-accent-lo: rgba(124,108,250,0.12);
+  --color-accent-glow: rgba(124,108,250,0.20);
+
+  /* Semantic */
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger:  #f87171;
+
+  /* Radii */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  18px;
+  --radius-2xl: 24px;
+
+  /* Shadows */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.5);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.45);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.55);
+  --shadow-glow: 0 0 0 1px rgba(124,108,250,0.25), 0 4px 24px rgba(124,108,250,0.12);
 }
 
-:root {
-  --bg-primary:   #0f1117;
-  --bg-secondary: #1a1d27;
-  --bg-card:      #1e2130;
-  --bg-input:     #252836;
-  --border:       #2e3148;
-  --accent:       #6c63ff;
-  --accent-hover: #7b73ff;
-  --accent-light: rgba(108, 99, 255, 0.12);
-  --text-primary: #e8eaf6;
-  --text-secondary: #9ca3af;
-  --text-muted:   #6b7280;
-  --success:      #10b981;
-  --warning:      #f59e0b;
-  --error:        #ef4444;
-  --user-bubble:  #6c63ff;
-  --bot-bubble:   #1e2130;
-  --radius:       12px;
-  --radius-sm:    8px;
-  --shadow:       0 4px 24px rgba(0,0,0,0.4);
-}
+/* ─── Base reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-text-1);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar        { width: 6px; }
-::-webkit-scrollbar-track  { background: transparent; }
-::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+/* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+/* ─── Selection ──────────────────────────────────────────────────────────────── */
+::selection { background: rgba(124,108,250,0.28); color: #fff; }
+
+/* ─── Focus ring ─────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ─── Utility classes shared across CSS Modules ──────────────────────────────── */
+.glass {
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ─── Keyframes ──────────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-dot {
+  0%, 60%, 100% { transform: translateY(0);   opacity: 0.35; }
+  30%           { transform: translateY(-5px); opacity: 1;    }
+}
+@keyframes shimmer {
+  from { background-position: -200% center; }
+  to   { background-position:  200% center; }
+}

@@ -1,105 +1,122 @@
-/* ChatBubble.module.css */
+/* ══════════════════════════════════════════════════════════════════
+   ChatBubble.module.css  —  Premium message bubbles
+   ══════════════════════════════════════════════════════════════════ */
 
-.wrapper {
+/* ── Row wrapper ─────────────────────────────────────────────────── */
+.row {
   display: flex;
-  gap: 10px;
   align-items: flex-start;
+  gap: 12px;
+  animation: fadeUp 0.22s ease;
   max-width: 100%;
-  animation: fadeIn 0.25s ease;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+.rowUser { flex-direction: row-reverse; }
+.rowBot  { flex-direction: row; }
 
-.user {
-  flex-direction: row-reverse;
-}
-
-.bot {
-  flex-direction: row;
-}
-
+/* ── Avatar ──────────────────────────────────────────────────────── */
 .avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 14px;
   flex-shrink: 0;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  margin-top: 2px;
 }
 
+.avatarUser {
+  background: linear-gradient(135deg, #5b4de0, #7c6cfa);
+  box-shadow: 0 2px 8px rgba(124,108,250,0.3);
+  font-size: 13px;
+}
+
+.avatarBot {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border-md);
+}
+
+/* ── Bubble ──────────────────────────────────────────────────────── */
 .bubble {
-  max-width: min(80%, 720px);
+  max-width: min(78%, 700px);
   border-radius: 14px;
-  padding: 12px 16px;
-  line-height: 1.6;
-  font-size: 0.88rem;
+  font-size: 13.5px;
+  line-height: 1.65;
 }
 
-.userBubble {
-  background: linear-gradient(135deg, #4f46e5, #6366f1);
-  color: #fff;
+/* User bubble — vibrant accent gradient */
+.bubbleUser {
+  background: linear-gradient(135deg, #4c3fd1 0%, #7c6cfa 100%);
+  color: rgba(255,255,255,0.96);
+  padding: 11px 16px;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 14px rgba(124,108,250,0.25), 0 1px 3px rgba(0,0,0,0.3);
 }
 
-.botBubble {
-  background: rgba(30, 41, 59, 0.8);
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+/* Bot bubble — soft elevated surface */
+.bubbleBot {
+  background: var(--color-panel);
+  color: var(--color-text-1);
+  border: 1px solid var(--color-border);
+  padding: 14px 18px;
   border-bottom-left-radius: 4px;
-  backdrop-filter: blur(4px);
+  box-shadow: var(--shadow-sm);
 }
 
+/* ── Text content ────────────────────────────────────────────────── */
 .content {
   word-wrap: break-word;
   white-space: pre-wrap;
 }
 
-/* ── Debug panel ─────────────────────────────────────────────────────────── */
+.content strong {
+  font-weight: 600;
+  color: inherit;
+}
 
-.debug {
-  margin-top: 10px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-  padding-top: 8px;
+/* ── Debug / tool-call panel ─────────────────────────────────────── */
+.debugSection {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
 }
 
 .debugToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: none;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  color: #94a3b8;
-  font-size: 0.72rem;
-  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-3);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 9px;
   border-radius: 20px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  letter-spacing: 0.1px;
 }
 
 .debugToggle:hover {
-  border-color: rgba(99, 102, 241, 0.4);
-  color: #a5b4fc;
+  border-color: rgba(124,108,250,0.3);
+  color: var(--color-accent-hi);
+  background: var(--color-accent-lo);
 }
 
-.debugContent {
-  margin-top: 6px;
+.debugList {
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.debugItem {
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 6px;
-  padding: 6px 10px;
-}
-
-.debugTool {
+.debugEntry {
+  background: var(--color-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 7px 12px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -107,30 +124,30 @@
 }
 
 .debugBadge {
-  background: rgba(99, 102, 241, 0.2);
-  color: #a5b4fc;
-  font-size: 0.7rem;
-  padding: 2px 8px;
+  font-size: 10.5px;
+  font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--color-accent-hi);
+  background: var(--color-accent-lo);
+  padding: 2px 7px;
   border-radius: 4px;
-  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
 }
 
 .debugArgs {
-  color: #64748b;
-  font-size: 0.7rem;
-  font-family: monospace;
   flex: 1;
+  font-size: 10.5px;
+  font-family: ui-monospace, monospace;
+  color: var(--color-text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ok {
-  color: #22c55e;
-  font-size: 0.8rem;
+.debugStatus {
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
-.err {
-  color: #ef4444;
-  font-size: 0.8rem;
-}
+.ok  { color: var(--color-success); }
+.err { color: var(--color-danger);  }

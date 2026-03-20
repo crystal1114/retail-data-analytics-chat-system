@@ -5,21 +5,19 @@ import ChartRenderer from './ChartRenderer';
 import styles from './ChatBubble.module.css';
 
 interface Props {
-  message: ChatMessage;
+  message:      ChatMessage;
   toolResults?: ToolResult[];
-  structured?: StructuredResponse | null;
+  structured?:  StructuredResponse | null;
 }
 
+// ── Lightweight markdown: **bold** + newlines ────────────────────────────────
 function formatContent(content: string): React.ReactNode {
-  // Convert **bold** markdown
   const parts = content.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
     }
-    // Handle newlines
-    const lines = part.split('\n');
-    return lines.map((line, j) => (
+    return part.split('\n').map((line, j) => (
       <React.Fragment key={`${i}-${j}`}>
         {j > 0 && <br />}
         {line}
@@ -28,31 +26,32 @@ function formatContent(content: string): React.ReactNode {
   });
 }
 
+// ── Collapsed tool-call debug panel ─────────────────────────────────────────
 function DebugPanel({ toolResults }: { toolResults: ToolResult[] }) {
   const [open, setOpen] = useState(false);
   if (!toolResults.length) return null;
 
+  const count = toolResults.length;
+
   return (
-    <div className={styles.debug}>
-      <button
-        className={styles.debugToggle}
-        onClick={() => setOpen(o => !o)}
-      >
-        🔧 {toolResults.length} tool call{toolResults.length > 1 ? 's' : ''} {open ? '▲' : '▼'}
+    <div className={styles.debugSection}>
+      <button className={styles.debugToggle} onClick={() => setOpen(o => !o)}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+        {count} tool call{count > 1 ? 's' : ''}&nbsp;
+        {open ? '▲' : '▼'}
       </button>
+
       {open && (
-        <div className={styles.debugContent}>
+        <div className={styles.debugList}>
           {toolResults.map((tr, i) => (
-            <div key={i} className={styles.debugItem}>
-              <div className={styles.debugTool}>
-                <span className={styles.debugBadge}>{tr.tool}</span>
-                <span className={styles.debugArgs}>
-                  {JSON.stringify(tr.args)}
-                </span>
-                <span className={tr.result.ok ? styles.ok : styles.err}>
-                  {tr.result.ok ? '✓' : '✗'}
-                </span>
-              </div>
+            <div key={i} className={styles.debugEntry}>
+              <span className={styles.debugBadge}>{tr.tool}</span>
+              <span className={styles.debugArgs}>{JSON.stringify(tr.args)}</span>
+              <span className={`${styles.debugStatus} ${tr.result.ok ? styles.ok : styles.err}`}>
+                {tr.result.ok ? '✓ ok' : '✗ err'}
+              </span>
             </div>
           ))}
         </div>
@@ -61,26 +60,31 @@ function DebugPanel({ toolResults }: { toolResults: ToolResult[] }) {
   );
 }
 
+// ── Main component ───────────────────────────────────────────────────────────
 export default function ChatBubble({ message, toolResults = [], structured }: Props) {
   const isUser = message.role === 'user';
   const hasViz = structured && structured.viz_type !== 'none' && structured.chart_data;
 
   return (
-    <div className={`${styles.wrapper} ${isUser ? styles.user : styles.bot}`}>
-      <div className={styles.avatar}>
-        {isUser ? '👤' : '🤖'}
+    <div className={`${styles.row} ${isUser ? styles.rowUser : styles.rowBot}`}>
+
+      {/* Avatar */}
+      <div className={`${styles.avatar} ${isUser ? styles.avatarUser : styles.avatarBot}`}>
+        {isUser ? '↑' : '✦'}
       </div>
-      <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.botBubble}`}>
+
+      {/* Bubble */}
+      <div className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleBot}`}>
         <div className={styles.content}>
           {formatContent(message.content)}
         </div>
 
-        {/* Visualization (chart, kpi, table) */}
+        {/* Visualization */}
         {!isUser && hasViz && (
           <ChartRenderer structured={structured!} />
         )}
 
-        {/* Debug tool calls */}
+        {/* Debug panel */}
         {!isUser && toolResults.length > 0 && (
           <DebugPanel toolResults={toolResults} />
         )}

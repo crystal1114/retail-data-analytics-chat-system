@@ -6,11 +6,11 @@ import TypingIndicator from './components/TypingIndicator';
 import type { ChatMessage, HealthResponse, ToolResult, StructuredResponse } from './types';
 import styles from './App.module.css';
 
-// ── Example prompts ─────────────────────────────────────────────────────────────
+// ── Sidebar prompt list ──────────────────────────────────────────────────────
 
 const SIDEBAR_PROMPTS = [
   { label: '📈 Monthly Revenue Trend',      text: 'Show me the monthly revenue trend' },
-  { label: '📊 Category Revenue Breakdown', text: 'Compare revenue across all product categories' },
+  { label: '📊 Category Breakdown',         text: 'Compare revenue across all product categories' },
   { label: '🥧 Payment Method Share',       text: 'What is the payment method distribution?' },
   { label: '🏆 Top Products Ranking',       text: 'Which products rank highest by revenue?' },
   { label: '📉 Category vs Category',       text: 'Compare Electronics vs Books vs Clothing revenue' },
@@ -32,7 +32,7 @@ const WELCOME_CHIPS = [
   'Show details for product A',
 ];
 
-// ── Types ────────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface DisplayMessage {
   id: string;
@@ -41,18 +41,18 @@ interface DisplayMessage {
   structured?: StructuredResponse | null;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────────
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
-  const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [history, setHistory]                 = useState<ChatMessage[]>([]);
+  const [input, setInput]                     = useState('');
+  const [loading, setLoading]                 = useState(false);
+  const [error, setError]                     = useState<string | null>(null);
+  const [health, setHealth]                   = useState<HealthResponse | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef    = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,9 +61,7 @@ export default function App() {
   useEffect(() => { scrollToBottom(); }, [displayMessages, loading, scrollToBottom]);
 
   useEffect(() => {
-    checkHealth()
-      .then(setHealth)
-      .catch(() => setHealth(null));
+    checkHealth().then(setHealth).catch(() => setHealth(null));
   }, []);
 
   const autoResize = useCallback(() => {
@@ -81,22 +79,16 @@ export default function App() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setError(null);
 
-    const userMsg: ChatMessage = { role: 'user', content };
+    const userMsg: ChatMessage  = { role: 'user', content };
     const newHistory: ChatMessage[] = [...history, userMsg];
 
-    setDisplayMessages(prev => [
-      ...prev,
-      { id: `user-${Date.now()}`, message: userMsg },
-    ]);
+    setDisplayMessages(prev => [...prev, { id: `user-${Date.now()}`, message: userMsg }]);
     setHistory(newHistory);
     setLoading(true);
 
     try {
       const response = await sendChat(newHistory);
-      const assistantMsg: ChatMessage = {
-        role: 'assistant',
-        content: response.reply,
-      };
+      const assistantMsg: ChatMessage = { role: 'assistant', content: response.reply };
 
       setHistory(prev => [...prev, assistantMsg]);
       setDisplayMessages(prev => [
@@ -105,14 +97,13 @@ export default function App() {
           id: `bot-${Date.now()}`,
           message: assistantMsg,
           toolResults: response.tool_results,
-          structured: response.structured,
+          structured:  response.structured,
         },
       ]);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Failed to reach the backend. Is the server running?';
+      const msg = err instanceof Error
+        ? err.message
+        : 'Failed to reach the backend. Is the server running?';
       setError(msg);
       setHistory(prev => prev.slice(0, -1));
     } finally {
@@ -122,10 +113,7 @@ export default function App() {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
     },
     [handleSend],
   );
@@ -136,26 +124,23 @@ export default function App() {
     setError(null);
   }, []);
 
-  const healthDotClass =
-    health === null
-      ? styles.offline
-      : health.status === 'ok' && health.database === 'ok'
-        ? styles.online
-        : styles.warn;
+  // Status dot
+  const statusCls =
+    health === null              ? styles.offline :
+    health.status === 'ok' && health.database === 'ok' ? styles.online  : styles.warn;
 
-  const healthText =
-    health === null
-      ? 'Backend offline'
-      : !health.openai_configured
-        ? 'No OpenAI key'
-        : health.database !== 'ok'
-          ? 'DB not ready'
-          : 'Ready';
+  const statusText =
+    health === null              ? 'Backend offline'  :
+    !health.openai_configured    ? 'No OpenAI key'    :
+    health.database !== 'ok'     ? 'DB not ready'     : 'Ready';
 
   return (
     <div className={styles.app}>
-      {/* ── Sidebar ────────────────────────────────────────────────────────────── */}
+
+      {/* ════════════════════════════════ SIDEBAR ════════════════════════════════ */}
       <aside className={styles.sidebar}>
+
+        {/* Branding */}
         <div className={styles.sidebarHeader}>
           <div className={styles.logo}>
             <span className={styles.logoIcon}>🛍️</span>
@@ -164,9 +149,10 @@ export default function App() {
           <div className={styles.tagline}>Analytics Chat Assistant</div>
         </div>
 
+        {/* Prompt list */}
         <div className={styles.sidebarSection}>
-          <div className={styles.sectionLabel}>Example Queries</div>
-          {SIDEBAR_PROMPTS.map((p) => (
+          <div className={styles.sectionLabel}>Suggestions</div>
+          {SIDEBAR_PROMPTS.map(p => (
             <button
               key={p.text}
               className={styles.promptChip}
@@ -178,43 +164,50 @@ export default function App() {
           ))}
         </div>
 
+        {/* Clear */}
         <button className={styles.clearBtn} onClick={handleClear}>
-          🗑️ Clear conversation
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+          Clear conversation
         </button>
 
+        {/* Status */}
         <div className={styles.statusBar}>
-          <div className={`${styles.statusDot} ${healthDotClass}`} />
-          <span>{healthText}</span>
+          <div className={`${styles.statusDot} ${statusCls}`} />
+          <span>{statusText}</span>
           {health && (
-            <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>
+            <span style={{ marginLeft: 'auto', fontSize: '12px' }}>
               {health.openai_configured ? '🔑' : '⚠️'}
             </span>
           )}
         </div>
       </aside>
 
-      {/* ── Main area ──────────────────────────────────────────────────────────── */}
+      {/* ═══════════════════════════════ MAIN AREA ═══════════════════════════════ */}
       <main className={styles.main}>
+
+        {/* Top bar */}
         <div className={styles.chatHeader}>
           <div>
             <div className={styles.chatTitle}>Retail Analytics Chat</div>
             <div className={styles.chatSubtitle}>
-              Ask questions about trends, comparisons, rankings, and customer/product details
+              Trends · Comparisons · Rankings · Customer & Product lookups
             </div>
           </div>
         </div>
 
-        {/* Messages */}
+        {/* Messages / Welcome */}
         {displayMessages.length === 0 ? (
           <div className={styles.welcome}>
-            <div className={styles.welcomeIcon}>📊</div>
-            <div className={styles.welcomeTitle}>What would you like to explore?</div>
-            <div className={styles.welcomeSubtitle}>
-              Ask about trends, comparisons, rankings, or look up customers and products.
-              Responses include interactive charts and visual insights.
-            </div>
-            <div className={styles.welcomeChips}>
-              {WELCOME_CHIPS.map((chip) => (
+            <div className={styles.welcomeGlow}>📊</div>
+            <h1 className={styles.welcomeTitle}>What would you like to explore?</h1>
+            <p className={styles.welcomeSubtitle}>
+              Ask about revenue trends, category comparisons, product rankings,
+              or look up any customer. Answers come with charts and data.
+            </p>
+            <div className={styles.welcomeGrid}>
+              {WELCOME_CHIPS.map(chip => (
                 <button
                   key={chip}
                   className={styles.welcomeChip}
@@ -227,7 +220,7 @@ export default function App() {
           </div>
         ) : (
           <div className={styles.messages}>
-            {displayMessages.map((dm) => (
+            {displayMessages.map(dm => (
               <ChatBubble
                 key={dm.id}
                 message={dm.message}
@@ -240,24 +233,24 @@ export default function App() {
           </div>
         )}
 
-        {/* Error banner */}
+        {/* Error */}
         {error && (
           <div className={styles.errorBanner}>
             <span>⚠️ {error}</span>
-            <button onClick={() => setError(null)}>✕</button>
+            <button onClick={() => setError(null)} aria-label="Dismiss">✕</button>
           </div>
         )}
 
-        {/* Input */}
+        {/* Composer */}
         <div className={styles.inputArea}>
           <div className={styles.inputWrapper}>
             <textarea
               ref={textareaRef}
               className={styles.textarea}
               value={input}
-              onChange={(e) => { setInput(e.target.value); autoResize(); }}
+              onChange={e => { setInput(e.target.value); autoResize(); }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about trends, comparisons, rankings, or specific customers/products…"
+              placeholder="Ask about trends, comparisons, rankings, or any customer / product…"
               rows={1}
               disabled={loading}
             />
@@ -266,13 +259,17 @@ export default function App() {
               onClick={() => handleSend()}
               disabled={loading || !input.trim()}
               title="Send (Enter)"
+              aria-label="Send message"
             >
-              ➤
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
             </button>
           </div>
-          <div className={styles.hint}>
-            Press <strong>Enter</strong> to send · <strong>Shift+Enter</strong> for new line
-          </div>
+          <p className={styles.hint}>
+            <strong>Enter</strong> to send · <strong>Shift + Enter</strong> for new line
+          </p>
         </div>
       </main>
     </div>

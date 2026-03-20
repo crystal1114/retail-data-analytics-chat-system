@@ -22,105 +22,106 @@ import type { VizType, ChartData, StructuredResponse } from '../types';
 import styles from './ChartRenderer.module.css';
 
 ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
+  CategoryScale, LinearScale, PointElement, LineElement,
+  BarElement, ArcElement, Title, Tooltip, Legend, Filler,
 );
 
-// ── Color palette ────────────────────────────────────────────────────────────
+// ── Palette ──────────────────────────────────────────────────────────────────
 
 const PALETTE = [
-  '#6366f1', // indigo
-  '#22c55e', // green
+  '#7c6cfa', // violet (primary)
+  '#34d399', // emerald
   '#f59e0b', // amber
-  '#ec4899', // pink
-  '#3b82f6', // blue
-  '#14b8a6', // teal
-  '#f97316', // orange
-  '#8b5cf6', // violet
-  '#ef4444', // red
-  '#06b6d4', // cyan
+  '#f472b6', // pink
+  '#38bdf8', // sky
+  '#a78bfa', // purple
+  '#fb923c', // orange
+  '#2dd4bf', // teal
+  '#f87171', // red
+  '#60a5fa', // blue
 ];
 
-const PALETTE_ALPHA = [
-  'rgba(99,102,241,0.15)',
-  'rgba(34,197,94,0.15)',
-  'rgba(245,158,11,0.15)',
-  'rgba(236,72,153,0.15)',
-  'rgba(59,130,246,0.15)',
-  'rgba(20,184,166,0.15)',
-  'rgba(249,115,22,0.15)',
-  'rgba(139,92,246,0.15)',
-  'rgba(239,68,68,0.15)',
-  'rgba(6,182,212,0.15)',
+const FILL_ALPHA = [
+  'rgba(124,108,250,0.12)',
+  'rgba(52,211,153,0.12)',
+  'rgba(245,158,11,0.12)',
+  'rgba(244,114,182,0.12)',
+  'rgba(56,189,248,0.12)',
+  'rgba(167,139,250,0.12)',
+  'rgba(251,146,60,0.12)',
+  'rgba(45,212,191,0.12)',
+  'rgba(248,113,113,0.12)',
+  'rgba(96,165,250,0.12)',
 ];
 
-function color(i: number) {
-  return PALETTE[i % PALETTE.length];
-}
+const c = (i: number) => PALETTE[i % PALETTE.length];
 
-// ── Common chart options ─────────────────────────────────────────────────────
+// ── Shared chart.js config ────────────────────────────────────────────────────
 
-const baseFont = {
-  family: "'Inter', 'system-ui', sans-serif",
-  size: 12,
-};
+const font = { family: "'Inter', system-ui, sans-serif", size: 11 };
 
-function commonOptions(horizontal = false): ChartOptions<any> {
+function baseOptions(horizontal = false): ChartOptions<any> {
   return {
     responsive: true,
     maintainAspectRatio: true,
-    animation: { duration: 600 },
+    animation: { duration: 550, easing: 'easeOutQuart' },
     plugins: {
       legend: {
         position: 'top' as const,
-        labels: { font: baseFont, padding: 16, boxWidth: 12 },
+        labels: {
+          font,
+          color: '#9ba8c0',
+          padding: 18,
+          boxWidth: 10,
+          boxHeight: 10,
+          usePointStyle: true,
+          pointStyle: 'circle',
+        },
       },
       tooltip: {
-        backgroundColor: 'rgba(15,23,42,0.92)',
-        titleFont: { ...baseFont, weight: 'bold' as const },
-        bodyFont: baseFont,
+        backgroundColor: 'rgba(8,11,20,0.95)',
+        titleColor: '#f0f4ff',
+        bodyColor: '#9ba8c0',
+        titleFont: { ...font, size: 12, weight: 'bold' as const },
+        bodyFont: font,
         padding: 12,
-        cornerRadius: 8,
+        cornerRadius: 10,
+        borderColor: 'rgba(124,108,250,0.25)',
+        borderWidth: 1,
         callbacks: {
           label: (ctx: any) => {
             const val = ctx.parsed?.y ?? ctx.parsed;
             if (typeof val === 'number') {
-              return ` ${ctx.dataset.label}: ${val.toLocaleString()}`;
+              return `  ${ctx.dataset.label}: ${val.toLocaleString()}`;
             }
-            return ` ${ctx.dataset.label}: ${val}`;
+            return `  ${ctx.dataset.label}: ${val}`;
           },
         },
       },
     },
-    scales: horizontal
-      ? {
-          x: {
-            grid: { color: 'rgba(148,163,184,0.1)' },
-            ticks: { font: baseFont },
-          },
-          y: {
-            grid: { display: false },
-            ticks: { font: baseFont },
-          },
-        }
-      : {
-          x: {
-            grid: { display: false },
-            ticks: { font: baseFont, maxRotation: 45 },
-          },
-          y: {
-            grid: { color: 'rgba(148,163,184,0.1)' },
-            ticks: { font: baseFont },
-          },
-        },
+    scales: horizontal ? {
+      x: {
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { font, color: '#5b6880' },
+        border: { color: 'rgba(255,255,255,0.05)' },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { font, color: '#5b6880' },
+        border: { display: false },
+      },
+    } : {
+      x: {
+        grid: { display: false },
+        ticks: { font, color: '#5b6880', maxRotation: 40 },
+        border: { color: 'rgba(255,255,255,0.05)' },
+      },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { font, color: '#5b6880' },
+        border: { display: false },
+      },
+    },
   };
 }
 
@@ -131,7 +132,7 @@ function KpiCard({ data }: { data: ChartData }) {
   return (
     <div className={styles.kpiGrid}>
       {kpis.map((kpi, i) => (
-        <div key={i} className={styles.kpiItem}>
+        <div key={i} className={styles.kpiCard}>
           {kpi.icon && <span className={styles.kpiIcon}>{kpi.icon}</span>}
           <div className={styles.kpiValue}>{kpi.value}</div>
           <div className={styles.kpiLabel}>{kpi.label}</div>
@@ -146,31 +147,22 @@ function KpiCard({ data }: { data: ChartData }) {
   );
 }
 
-// ── Table ────────────────────────────────────────────────────────────────────
+// ── Data Table ────────────────────────────────────────────────────────────────
 
 function DataTable({ data }: { data: ChartData }) {
   const columns = data.columns || [];
-  const rows = data.rows || [];
-
-  if (columns.length === 0 || rows.length === 0) return null;
+  const rows    = data.rows    || [];
+  if (!columns.length || !rows.length) return null;
 
   return (
-    <div className={styles.tableWrapper}>
-      <table className={styles.dataTable}>
+    <div className={styles.tableWrap}>
+      <table className={styles.table}>
         <thead>
-          <tr>
-            {columns.map((col, i) => (
-              <th key={i}>{col}</th>
-            ))}
-          </tr>
+          <tr>{columns.map((col, i) => <th key={i}>{col}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((cell, ci) => (
-                <td key={ci}>{cell}</td>
-              ))}
-            </tr>
+            <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
           ))}
         </tbody>
       </table>
@@ -178,127 +170,134 @@ function DataTable({ data }: { data: ChartData }) {
   );
 }
 
-// ── Line Chart ───────────────────────────────────────────────────────────────
+// ── Line Chart ────────────────────────────────────────────────────────────────
 
 function LineChart({ data }: { data: ChartData }) {
+  const multiSeries = (data.datasets || []).length > 1;
+
   const chartData: ChartJSData<'line'> = useMemo(() => ({
     labels: data.labels || [],
     datasets: (data.datasets || []).map((ds, i) => ({
       label: ds.label,
-      data: ds.data,
-      borderColor: color(i),
-      backgroundColor: PALETTE_ALPHA[i % PALETTE_ALPHA.length],
-      pointBackgroundColor: color(i),
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      tension: 0.3,
-      fill: (data.datasets || []).length === 1,
+      data:  ds.data,
+      borderColor:       c(i),
+      backgroundColor:   FILL_ALPHA[i % FILL_ALPHA.length],
+      pointBackgroundColor: c(i),
+      pointBorderColor:  'transparent',
+      pointRadius:       multiSeries ? 3 : 4,
+      pointHoverRadius:  6,
+      borderWidth:       2,
+      tension:           0.35,
+      fill:              !multiSeries,
     })),
-  }), [data]);
+  }), [data, multiSeries]);
 
   const options: ChartOptions<'line'> = {
-    ...commonOptions(),
+    ...baseOptions(),
     plugins: {
-      ...commonOptions().plugins,
-      legend: {
-        ...commonOptions().plugins?.legend,
-        display: (data.datasets || []).length > 1,
-      },
+      ...baseOptions().plugins,
+      legend: { ...baseOptions().plugins?.legend, display: multiSeries },
     },
   };
 
   return <Line data={chartData} options={options} />;
 }
 
-// ── Bar Chart ────────────────────────────────────────────────────────────────
+// ── Bar Chart ─────────────────────────────────────────────────────────────────
 
 function BarChart({ data }: { data: ChartData }) {
-  const multiDataset = (data.datasets || []).length > 1;
+  const multi = (data.datasets || []).length > 1;
 
   const chartData: ChartJSData<'bar'> = useMemo(() => ({
     labels: data.labels || [],
     datasets: (data.datasets || []).map((ds, i) => ({
       label: ds.label,
-      data: ds.data,
-      backgroundColor: multiDataset
-        ? color(i)
-        : (data.labels || []).map((_label, idx) => color(idx)),
-      borderColor: 'transparent',
-      borderRadius: 6,
+      data:  ds.data,
+      backgroundColor: multi
+        ? c(i)
+        : (data.labels || []).map((_l, idx) => c(idx)),
+      borderColor:   'transparent',
+      borderRadius:  6,
       borderSkipped: false,
     })),
-  }), [data, multiDataset]);
+  }), [data, multi]);
 
-  return <Bar data={chartData} options={commonOptions()} />;
+  return <Bar data={chartData} options={baseOptions()} />;
 }
 
-// ── Horizontal Bar Chart ─────────────────────────────────────────────────────
+// ── Horizontal Bar ────────────────────────────────────────────────────────────
 
 function HorizontalBarChart({ data }: { data: ChartData }) {
   const chartData: ChartJSData<'bar'> = useMemo(() => ({
     labels: data.labels || [],
     datasets: (data.datasets || []).map((ds) => ({
       label: ds.label,
-      data: ds.data,
-      backgroundColor: (data.labels || []).map((_lbl, idx) => color(idx)),
-      borderColor: 'transparent',
-      borderRadius: 4,
+      data:  ds.data,
+      backgroundColor: (data.labels || []).map((_l, idx) => c(idx)),
+      borderColor:   'transparent',
+      borderRadius:  5,
       borderSkipped: false,
     })),
   }), [data]);
 
   const options: ChartOptions<'bar'> = {
-    ...commonOptions(true),
+    ...baseOptions(true),
     indexAxis: 'y' as const,
-    plugins: {
-      ...commonOptions(true).plugins,
-      legend: { display: false },
-    },
+    plugins: { ...baseOptions(true).plugins, legend: { display: false } },
   };
 
   return <Bar data={chartData} options={options} />;
 }
 
-// ── Pie / Doughnut Chart ─────────────────────────────────────────────────────
+// ── Doughnut Chart ────────────────────────────────────────────────────────────
 
 function PieChart({ data }: { data: ChartData }) {
   const labels = data.labels || [];
-  const ds = (data.datasets || [])[0] || { label: '', data: [] };
+  const ds     = (data.datasets || [])[0] || { label: '', data: [] };
 
   const chartData: ChartJSData<'doughnut'> = useMemo(() => ({
     labels,
-    datasets: [
-      {
-        label: ds.label,
-        data: ds.data,
-        backgroundColor: labels.map((_lbl, i) => color(i)),
-        borderColor: '#1e293b',
-        borderWidth: 2,
-        hoverOffset: 8,
-      },
-    ],
+    datasets: [{
+      label:           ds.label,
+      data:            ds.data,
+      backgroundColor: labels.map((_l, i) => c(i)),
+      borderColor:     '#111827',
+      borderWidth:     2,
+      hoverOffset:     10,
+    }],
   }), [data]);
 
   const options: ChartOptions<'doughnut'> = {
     responsive: true,
     maintainAspectRatio: true,
-    animation: { duration: 600 },
-    cutout: '55%',
+    animation:  { duration: 550 },
+    cutout:     '58%',
     plugins: {
       legend: {
         position: 'right' as const,
-        labels: { font: baseFont, padding: 16, boxWidth: 14 },
+        labels: {
+          font,
+          color:       '#9ba8c0',
+          padding:     16,
+          boxWidth:    12,
+          usePointStyle: true,
+          pointStyle:  'circle',
+        },
       },
       tooltip: {
-        backgroundColor: 'rgba(15,23,42,0.92)',
-        titleFont: { ...baseFont, weight: 'bold' as const },
-        bodyFont: baseFont,
-        padding: 12,
-        cornerRadius: 8,
+        backgroundColor: 'rgba(8,11,20,0.95)',
+        titleColor:  '#f0f4ff',
+        bodyColor:   '#9ba8c0',
+        titleFont:   { ...font, size: 12, weight: 'bold' as const },
+        bodyFont:    font,
+        padding:     12,
+        cornerRadius: 10,
+        borderColor: 'rgba(124,108,250,0.25)',
+        borderWidth: 1,
         callbacks: {
           label: (ctx: any) => {
             const val = typeof ctx.parsed === 'number' ? ctx.parsed : 0;
-            return ` ${ctx.label}: ${val.toLocaleString()}`;
+            return `  ${ctx.label}: ${val.toLocaleString()}`;
           },
         },
       },
@@ -308,54 +307,43 @@ function PieChart({ data }: { data: ChartData }) {
   return <Doughnut data={chartData} options={options} />;
 }
 
-// ── Main ChartRenderer ───────────────────────────────────────────────────────
+// ── Main export ───────────────────────────────────────────────────────────────
 
-interface Props {
-  structured: StructuredResponse;
-}
+interface Props { structured: StructuredResponse; }
 
 export default function ChartRenderer({ structured }: Props) {
   const { viz_type, insight, chart_data } = structured;
+  if (!chart_data || viz_type === 'none') return null;
 
-  if (!chart_data || viz_type === 'none') {
-    return null;
-  }
+  const isChartViz = ['line_chart', 'bar_chart', 'horizontal_bar_chart', 'pie_chart'].includes(viz_type);
 
-  const renderChart = () => {
+  const renderViz = () => {
     switch (viz_type as VizType) {
-      case 'line_chart':
-        return <LineChart data={chart_data} />;
-      case 'bar_chart':
-        return <BarChart data={chart_data} />;
-      case 'horizontal_bar_chart':
-        return <HorizontalBarChart data={chart_data} />;
-      case 'pie_chart':
-        return <PieChart data={chart_data} />;
-      case 'kpi_card':
-        return <KpiCard data={chart_data} />;
-      case 'table':
-        return <DataTable data={chart_data} />;
-      default:
-        return null;
+      case 'line_chart':           return <LineChart           data={chart_data} />;
+      case 'bar_chart':            return <BarChart            data={chart_data} />;
+      case 'horizontal_bar_chart': return <HorizontalBarChart  data={chart_data} />;
+      case 'pie_chart':            return <PieChart            data={chart_data} />;
+      case 'kpi_card':             return <KpiCard             data={chart_data} />;
+      case 'table':                return <DataTable           data={chart_data} />;
+      default:                     return null;
     }
   };
 
-  const chart = renderChart();
-  if (!chart) return null;
-
-  // Determine if chart should be constrained in height
-  const isChart = ['line_chart', 'bar_chart', 'horizontal_bar_chart', 'pie_chart'].includes(viz_type);
+  const viz = renderViz();
+  if (!viz) return null;
 
   return (
-    <div className={styles.container}>
+    <div className={styles.card}>
       {insight && (
         <div className={styles.insight}>
-          <span className={styles.insightIcon}>💡</span>
+          <span className={styles.insightDot} />
           <span>{insight}</span>
         </div>
       )}
-      <div className={`${styles.chartArea} ${isChart ? styles.chartConstrained : ''}`}>
-        {chart}
+      <div className={styles.body}>
+        {isChartViz ? (
+          <div className={styles.chartWrap}>{viz}</div>
+        ) : viz}
       </div>
     </div>
   );

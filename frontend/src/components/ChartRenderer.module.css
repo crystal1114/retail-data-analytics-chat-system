@@ -1,149 +1,166 @@
-/* ChartRenderer.module.css */
+/* ══════════════════════════════════════════════════════════════════
+   ChartRenderer.module.css  —  Premium chart card styling
+   ══════════════════════════════════════════════════════════════════ */
 
-.container {
-  margin-top: 12px;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  border-radius: 12px;
+/* ── Outer card ──────────────────────────────────────────────────── */
+.card {
+  margin-top: 14px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border-md);
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
+/* ── Insight strip ───────────────────────────────────────────────── */
 .insight {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 12px 16px;
-  background: rgba(99, 102, 241, 0.08);
-  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
-  font-size: 0.83rem;
-  color: #c7d2fe;
-  line-height: 1.5;
+  gap: 9px;
+  padding: 11px 16px;
+  background: rgba(124,108,250,0.06);
+  border-bottom: 1px solid rgba(124,108,250,0.1);
+  font-size: 12.5px;
+  color: #c4b5fd;
+  line-height: 1.55;
 }
 
-.insightIcon {
-  font-size: 1rem;
+.insightDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent-hi);
   flex-shrink: 0;
-  margin-top: 1px;
+  margin-top: 4px;
+  box-shadow: 0 0 6px rgba(124,108,250,0.5);
 }
 
-.chartArea {
-  padding: 16px;
+/* ── Chart body ──────────────────────────────────────────────────── */
+.body {
+  padding: 20px 18px 18px;
 }
 
-.chartConstrained {
-  max-height: 340px;
+.chartWrap {
+  position: relative;
+  max-height: 300px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.chartConstrained > * {
-  width: 100%;
-  max-height: 310px;
+.chartWrap > * {
+  width: 100% !important;
+  max-height: 290px !important;
 }
 
-/* ── KPI Card ──────────────────────────────────────────────────────────────── */
-
+/* ══════════════════════════════════════════════════════════════════
+   KPI CARDS
+   ══════════════════════════════════════════════════════════════════ */
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-  padding: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
 }
 
-.kpiItem {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 10px;
-  padding: 14px 16px;
+.kpiCard {
+  background: var(--color-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px 14px 14px;
   text-align: center;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  cursor: default;
 }
 
-.kpiItem:hover {
-  border-color: rgba(99, 102, 241, 0.4);
+.kpiCard:hover {
+  border-color: rgba(124,108,250,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
 }
 
 .kpiIcon {
   display: block;
-  font-size: 1.4rem;
-  margin-bottom: 6px;
+  font-size: 18px;
+  margin-bottom: 8px;
+  line-height: 1;
 }
 
 .kpiValue {
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  color: #f1f5f9;
-  letter-spacing: -0.5px;
+  color: var(--color-text-1);
+  letter-spacing: -0.4px;
+  line-height: 1.2;
   word-break: break-all;
 }
 
 .kpiLabel {
-  font-size: 0.72rem;
-  color: #94a3b8;
-  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--color-text-3);
+  margin-top: 5px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  font-weight: 500;
 }
 
 .kpiDelta {
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 600;
   margin-top: 4px;
 }
 
-.positive {
-  color: #22c55e;
-}
+.positive { color: var(--color-success); }
+.negative { color: var(--color-danger);  }
 
-.negative {
-  color: #ef4444;
-}
-
-/* ── Table ─────────────────────────────────────────────────────────────────── */
-
-.tableWrapper {
+/* ══════════════════════════════════════════════════════════════════
+   DATA TABLE
+   ══════════════════════════════════════════════════════════════════ */
+.tableWrap {
   overflow-x: auto;
   overflow-y: auto;
-  max-height: 360px;
+  max-height: 320px;
   border-radius: 8px;
+  border: 1px solid var(--color-border);
 }
 
-.dataTable {
+.table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 12px;
   white-space: nowrap;
 }
 
-.dataTable thead tr {
-  background: rgba(99, 102, 241, 0.12);
+/* Header */
+.table thead tr {
+  background: rgba(124,108,250,0.07);
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
-.dataTable th {
-  padding: 10px 14px;
+.table th {
+  padding: 9px 14px;
   text-align: left;
   font-weight: 600;
-  color: #a5b4fc;
-  font-size: 0.75rem;
+  color: #a78bfa;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid rgba(124,108,250,0.12);
 }
 
-.dataTable td {
-  padding: 9px 14px;
-  color: #cbd5e1;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+/* Body */
+.table td {
+  padding: 8.5px 14px;
+  color: var(--color-text-2);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.dataTable tbody tr:last-child td {
+.table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.dataTable tbody tr:hover td {
-  background: rgba(99, 102, 241, 0.06);
+.table tbody tr:hover td {
+  background: rgba(124,108,250,0.04);
+  color: var(--color-text-1);
 }
