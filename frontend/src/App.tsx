@@ -143,10 +143,10 @@ export default function App() {
         {/* Branding */}
         <div className={styles.sidebarHeader}>
           <div className={styles.logo}>
-            <span className={styles.logoIcon}>🛍️</span>
+            <div className={styles.logoMark}>🛍️</div>
             <span className={styles.logoText}>Retail<span>AI</span></span>
           </div>
-          <div className={styles.tagline}>Analytics Chat Assistant</div>
+          <div className={styles.tagline}>Analytics Chat</div>
         </div>
 
         {/* Prompt list */}
@@ -164,23 +164,24 @@ export default function App() {
           ))}
         </div>
 
-        {/* Clear */}
-        <button className={styles.clearBtn} onClick={handleClear}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
-          </svg>
-          Clear conversation
-        </button>
+        {/* Footer: Clear + Status */}
+        <div className={styles.sidebarFooter}>
+          <button className={styles.clearBtn} onClick={handleClear}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
+            </svg>
+            Clear conversation
+          </button>
 
-        {/* Status */}
-        <div className={styles.statusBar}>
-          <div className={`${styles.statusDot} ${statusCls}`} />
-          <span>{statusText}</span>
-          {health && (
-            <span style={{ marginLeft: 'auto', fontSize: '12px' }}>
-              {health.openai_configured ? '🔑' : '⚠️'}
-            </span>
-          )}
+          <div className={styles.statusBar}>
+            <div className={`${styles.statusDot} ${statusCls}`} />
+            <span>{statusText}</span>
+            {health && (
+              <span style={{ marginLeft: 'auto', fontSize: '11px' }}>
+                {health.openai_configured ? '🔑' : '⚠️'}
+              </span>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -192,7 +193,7 @@ export default function App() {
           <div>
             <div className={styles.chatTitle}>Retail Analytics Chat</div>
             <div className={styles.chatSubtitle}>
-              Trends · Comparisons · Rankings · Customer & Product lookups
+              Trends · Comparisons · Rankings · Customer &amp; Product lookups
             </div>
           </div>
         </div>
@@ -200,7 +201,7 @@ export default function App() {
         {/* Messages / Welcome */}
         {displayMessages.length === 0 ? (
           <div className={styles.welcome}>
-            <div className={styles.welcomeGlow}>📊</div>
+            <div className={styles.welcomeIcon}>✦</div>
             <h1 className={styles.welcomeTitle}>What would you like to explore?</h1>
             <p className={styles.welcomeSubtitle}>
               Ask about revenue trends, category comparisons, product rankings,
@@ -261,7 +262,7 @@ export default function App() {
               title="Send (Enter)"
               aria-label="Send message"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"/>
               </svg>
