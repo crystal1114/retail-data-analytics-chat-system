@@ -7,7 +7,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const client = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 60_000,
+  timeout: 90_000,
 });
 
 export async function sendChat(messages: ChatMessage[]): Promise<ChatResponse> {

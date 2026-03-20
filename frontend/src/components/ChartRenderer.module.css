@@ -1,0 +1,149 @@
+/* ChartRenderer.module.css */
+
+.container {
+  margin-top: 12px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(99, 102, 241, 0.08);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  font-size: 0.83rem;
+  color: #c7d2fe;
+  line-height: 1.5;
+}
+
+.insightIcon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.chartArea {
+  padding: 16px;
+}
+
+.chartConstrained {
+  max-height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chartConstrained > * {
+  width: 100%;
+  max-height: 310px;
+}
+
+/* ── KPI Card ──────────────────────────────────────────────────────────────── */
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.kpiItem {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.kpiItem:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.kpiIcon {
+  display: block;
+  font-size: 1.4rem;
+  margin-bottom: 6px;
+}
+
+.kpiValue {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: -0.5px;
+  word-break: break-all;
+}
+
+.kpiLabel {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpiDelta {
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.positive {
+  color: #22c55e;
+}
+
+.negative {
+  color: #ef4444;
+}
+
+/* ── Table ─────────────────────────────────────────────────────────────────── */
+
+.tableWrapper {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 360px;
+  border-radius: 8px;
+}
+
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.dataTable thead tr {
+  background: rgba(99, 102, 241, 0.12);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dataTable th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: #a5b4fc;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.dataTable td {
+  padding: 9px 14px;
+  color: #cbd5e1;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+.dataTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.dataTable tbody tr:hover td {
+  background: rgba(99, 102, 241, 0.06);
+}

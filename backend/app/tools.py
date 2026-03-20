@@ -2,9 +2,6 @@
 backend/app/tools.py
 
 Definitions of the callable tools exposed to the LLM via OpenAI function calling.
-
-Each entry in TOOL_DEFINITIONS is an OpenAI-compatible function schema.
-The mapping TOOL_HANDLER_MAP connects tool names to repository callables.
 """
 
 from __future__ import annotations
@@ -39,10 +36,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "customer_id": {
                         "type": "string",
-                        "description": (
-                            "The numeric customer ID (e.g. '109318'). "
-                            "Do not guess—ask the user if unknown."
-                        ),
+                        "description": "The numeric customer ID (e.g. '109318'). Do not guess.",
                     }
                 },
                 "required": ["customer_id"],
@@ -55,17 +49,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "name": "get_customer_purchases",
             "description": (
                 "Returns a list of recent purchases for a specific customer, "
-                "ordered by transaction date descending. Each row includes "
-                "product_id, category, quantity, price, discount, total_amount, "
-                "date, payment method, and store location."
+                "ordered by transaction date descending."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "customer_id": {
-                        "type": "string",
-                        "description": "The numeric customer ID.",
-                    },
+                    "customer_id": {"type": "string", "description": "The numeric customer ID."},
                     "limit": {
                         "type": "integer",
                         "description": "Maximum number of purchases to return (1–100, default 20).",
@@ -83,31 +72,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "description": (
                 "Returns aggregate statistics for a specific product: "
                 "transaction count, total units sold, total revenue, average price, "
-                "average discount percentage, unique customers count, and store count. "
-                "Valid product IDs are: A, B, C, D."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "product_id": {
-                        "type": "string",
-                        "description": (
-                            "The product ID (one of: A, B, C, D). "
-                            "Do not guess—ask the user if unknown."
-                        ),
-                    }
-                },
-                "required": ["product_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_product_stores",
-            "description": (
-                "Returns a list of store locations that sell a specific product, "
-                "with per-store transaction count and total revenue. "
+                "average discount, unique customers, store count. "
                 "Valid product IDs are: A, B, C, D."
             ),
             "parameters": {
@@ -125,19 +90,43 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "get_product_stores",
+            "description": (
+                "Returns a list of store locations that sell a specific product "
+                "with per-store transaction count and revenue."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {"type": "string", "description": "The product ID (A, B, C, or D)."}
+                },
+                "required": ["product_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_business_metric",
             "description": (
-                "Returns a structured business analytics metric. "
-                "Use this for aggregate or trend questions about the business. "
-                f"Available metrics: {sorted(METRIC_ALLOWLIST)}. "
-                "Descriptions: "
-                "'overall_kpis' – total revenue, transactions, quantity, unique customers/products; "
-                "'revenue_by_store' – revenue ranked by store location; "
-                "'top_products_by_revenue' – products ranked by revenue; "
-                "'monthly_revenue' – revenue trend by calendar month; "
-                "'revenue_by_category' – revenue broken down by product category; "
-                "'top_customers_by_spend' – highest-spending customers; "
-                "'payment_method_breakdown' – transaction share by payment method."
+                "Returns structured business analytics metric. "
+                "Use for aggregate, trend, comparison, ranking, and distribution questions. "
+                "\n\nAvailable metrics:\n"
+                "- overall_kpis: Total revenue, transactions, customers, products, avg values\n"
+                "- monthly_revenue: Revenue trend by calendar month (line chart)\n"
+                "- monthly_transactions: Transaction count trend by month (line chart)\n"
+                "- monthly_revenue_by_category: Monthly revenue per category (multi-line chart)\n"
+                "- monthly_revenue_by_product: Monthly revenue per product A/B/C/D (multi-line chart)\n"
+                "- revenue_by_category: Revenue, units, discount per category (bar/pie chart)\n"
+                "- category_comparison: Full KPI comparison across all categories\n"
+                "- product_comparison: Full KPI comparison across all products\n"
+                "- top_products_by_revenue: Products ranked by revenue (horizontal bar)\n"
+                "- top_customers_by_spend: Top spending customers (horizontal bar)\n"
+                "- revenue_by_store: Stores ranked by revenue (horizontal bar)\n"
+                "- payment_method_breakdown: Transaction and revenue share by payment method (pie)\n"
+                "- revenue_by_payment_method: Revenue comparison by payment method (bar)\n"
+                "- discount_by_category: Average discount rates by category (bar)\n"
+                "- quantity_by_category: Units sold by category (bar)\n"
             ),
             "parameters": {
                 "type": "object",
@@ -162,20 +151,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "compare_customers",
             "description": (
-                "Returns a side-by-side comparison of two customers' statistics. "
-                "Requires both customer IDs."
+                "Returns a side-by-side comparison of two customers' statistics."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "customer_id_a": {
-                        "type": "string",
-                        "description": "First customer's numeric ID.",
-                    },
-                    "customer_id_b": {
-                        "type": "string",
-                        "description": "Second customer's numeric ID.",
-                    },
+                    "customer_id_a": {"type": "string", "description": "First customer's numeric ID."},
+                    "customer_id_b": {"type": "string", "description": "Second customer's numeric ID."},
                 },
                 "required": ["customer_id_a", "customer_id_b"],
             },
@@ -190,17 +172,6 @@ def dispatch_tool(
     tool_args: dict[str, Any],
     conn: sqlite3.Connection,
 ) -> dict[str, Any]:
-    """
-    Routes a tool call to the correct repository function.
-
-    Args:
-        tool_name: One of the names in TOOL_DEFINITIONS.
-        tool_args: Parsed JSON arguments from the LLM.
-        conn:      Open SQLite connection.
-
-    Returns:
-        Repository result dict with 'ok' key.
-    """
     try:
         if tool_name == "get_customer_summary":
             return get_customer_summary(conn, tool_args["customer_id"])

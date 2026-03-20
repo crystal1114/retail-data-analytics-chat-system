@@ -152,6 +152,7 @@ def chat(
     result = run_chat(messages=messages, conn=conn)
     return ChatResponse(
         reply=result["reply"],
+        structured=result.get("structured"),
         tool_results=result.get("tool_results", []),
         metadata=result.get("metadata", {}),
     )
