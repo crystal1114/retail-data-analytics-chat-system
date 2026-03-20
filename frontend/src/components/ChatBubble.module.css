@@ -1,0 +1,173 @@
+/* src/components/ChatBubble.module.css */
+
+.bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  animation: fadeSlide 0.2s ease;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.avatar.userAvatar {
+  background: var(--user-bubble);
+  color: white;
+}
+
+.avatar.botAvatar {
+  background: var(--bg-input);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.content {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+.bubble.user .content {
+  background: var(--user-bubble);
+  color: white;
+  border-bottom-right-radius: 3px;
+}
+
+.bubble.assistant .content {
+  background: var(--bot-bubble);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 3px;
+}
+
+/* Markdown inside assistant bubbles */
+.content h1, .content h2, .content h3 {
+  color: var(--text-primary);
+  margin: 10px 0 4px;
+}
+
+.content p { margin: 6px 0; }
+.content ul, .content ol {
+  margin: 6px 0 6px 20px;
+}
+.content li { margin: 2px 0; }
+.content strong { color: white; }
+.content code {
+  background: var(--bg-input);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+.content pre {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.content pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.content th, .content td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.content th {
+  background: var(--bg-input);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.content tr:nth-child(even) td {
+  background: rgba(255,255,255,0.02);
+}
+
+/* Debug panel */
+.debugToggle {
+  margin-top: 6px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.debugToggle:hover {
+  color: var(--text-secondary);
+  border-color: var(--text-muted);
+}
+
+.debugPanel {
+  margin-top: 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-height: 260px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.debugPanel pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
