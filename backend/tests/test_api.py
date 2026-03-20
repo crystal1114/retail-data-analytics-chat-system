@@ -188,11 +188,9 @@ class TestChatEndpoint:
         choice.message = msg
         mock_resp = MagicMock()
         mock_resp.choices = [choice]
-        from unittest.mock import AsyncMock
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_resp)
+        mock_client.chat.completions.create.return_value = mock_resp
 
-        chat_service._client = None  # reset singleton
-        with patch("backend.app.chat_service.AsyncOpenAI", return_value=mock_client), \
+        with patch("backend.app.chat_service.OpenAI", return_value=mock_client), \
              patch.object(type(chat_service.settings), "openai_configured",
                           new_callable=PropertyMock, return_value=True), \
              patch.object(chat_service.settings, "openai_api_key", "sk-fake"):

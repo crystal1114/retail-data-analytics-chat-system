@@ -2,17 +2,15 @@
 """
 B. Chat orchestration tests
 
-Uses unittest.mock to stub the AsyncOpenAI client so no real API calls are made.
-run_chat is now async — tests use asyncio.run() to execute it synchronously.
+Uses unittest.mock to stub the OpenAI client so no real API calls are made.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import sqlite3
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
@@ -68,22 +66,15 @@ def _make_tool_call_response(
 def _patch_settings_for_openai(mock_client):
     """
     Return a list of context managers that:
-    - Replace the module-level AsyncOpenAI class with one that returns mock_client
-    - Patch settings so openai_configured returns True
-    - Reset the module-level _client singleton so the patched class is used
+    - Replace the module-level OpenAI class with one that returns mock_client
+    - Patch settings.openai_api_key so openai_configured returns True
     """
     return [
-        patch("backend.app.chat_service.AsyncOpenAI", return_value=mock_client),
+        patch("backend.app.chat_service.OpenAI", return_value=mock_client),
         patch.object(type(chat_service.settings), "openai_configured",
                      new_callable=PropertyMock, return_value=True),
         patch.object(chat_service.settings, "openai_api_key", "sk-fake"),
     ]
-
-
-def _run(coro):
-    """Run a coroutine synchronously, resetting the singleton between tests."""
-    chat_service._client = None   # force fresh client creation each test
-    return asyncio.run(coro)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────────
@@ -124,9 +115,9 @@ class TestNoApiKey:
     def test_returns_graceful_message(self, db: sqlite3.Connection):
         with patch.object(type(chat_service.settings), "openai_configured",
                           new_callable=PropertyMock, return_value=False):
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "Hello"}], db
-            ))
+            )
         assert result["reply"] != ""
         assert "OpenAI" in result["reply"] or "key" in result["reply"].lower()
         assert result["metadata"]["error"] == "no_api_key"
@@ -143,18 +134,17 @@ class TestCustomerFlow:
         final_resp = _make_stop_response("Customer C001 has 1 transaction totaling $90.")
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=[tool_resp, final_resp])
+        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "Tell me about customer C001"}], db
-            ))
+            )
 
         assert result["reply"] == "Customer C001 has 1 transaction totaling $90."
-        # tool_results may include a pre-fetched entry; find the one from LLM
-        tool_names = [t["tool"] for t in result["tool_results"]]
-        assert "get_customer_summary" in tool_names
+        assert len(result["tool_results"]) == 1
+        assert result["tool_results"][0]["tool"] == "get_customer_summary"
 
     def test_customer_purchases_tool_called(self, db: sqlite3.Connection):
         tool_resp = _make_tool_call_response(
@@ -163,13 +153,13 @@ class TestCustomerFlow:
         final_resp = _make_stop_response("C001 bought product A.")
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=[tool_resp, final_resp])
+        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "What has customer C001 purchased?"}], db
-            ))
+            )
 
         assert "C001" in result["reply"]
 
@@ -184,16 +174,15 @@ class TestProductFlow:
         final_resp = _make_stop_response("Product A has 1 transaction.")
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=[tool_resp, final_resp])
+        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "Tell me about product A"}], db
-            ))
+            )
 
-        tool_names = [t["tool"] for t in result["tool_results"]]
-        assert "get_product_summary" in tool_names
+        assert result["tool_results"][0]["tool"] == "get_product_summary"
 
     def test_product_stores_tool_called(self, db: sqlite3.Connection):
         tool_resp = _make_tool_call_response(
@@ -202,16 +191,15 @@ class TestProductFlow:
         final_resp = _make_stop_response("Product B is sold in Shelbyville.")
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=[tool_resp, final_resp])
+        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "Which stores sell product B?"}], db
-            ))
+            )
 
-        tool_names = [t["tool"] for t in result["tool_results"]]
-        assert "get_product_stores" in tool_names
+        assert result["tool_results"][0]["tool"] == "get_product_stores"
 
 
 # ── Business metric flow ──────────────────────────────────────────────────────────
@@ -224,18 +212,16 @@ class TestBusinessMetricFlow:
         final_resp = _make_stop_response("Total revenue is $118.50.")
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=[tool_resp, final_resp])
+        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "What is the total revenue?"}], db
-            ))
+            )
 
-        tool_names = [t["tool"] for t in result["tool_results"]]
-        assert "get_business_metric" in tool_names
-        metric_tool = next(t for t in result["tool_results"] if t["tool"] == "get_business_metric")
-        assert metric_tool["args"]["metric_name"] == "overall_kpis"
+        assert result["tool_results"][0]["tool"] == "get_business_metric"
+        assert result["tool_results"][0]["args"]["metric_name"] == "overall_kpis"
 
 
 # ── Clarification flow ────────────────────────────────────────────────────────────
@@ -248,16 +234,15 @@ class TestClarificationFlow:
         )
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(return_value=final_resp)
+        mock_client.chat.completions.create.return_value = final_resp
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "How much did this customer spend?"}], db
-            ))
+            )
 
-        # Pre-fetch may add entries; LLM-called tool_calls should be 0
-        llm_tools = [t for t in result["tool_results"] if not t.get("args", {}).get("_prefetched")]
+        assert len(result["tool_results"]) == 0
         assert "customer" in result["reply"].lower()
 
 
@@ -286,13 +271,14 @@ class TestMalformedToolArgs:
         final_resp = _make_stop_response("Sorry, something went wrong.")
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=[bad_resp, final_resp])
+        mock_client.chat.completions.create.side_effect = [bad_resp, final_resp]
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            # Should not raise
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "Tell me about customer X"}], db
-            ))
+            )
 
         assert isinstance(result["reply"], str)
 
@@ -317,19 +303,14 @@ class TestMalformedToolArgs:
         final_resp = _make_stop_response("I cannot do that.")
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(side_effect=[bad_resp, final_resp])
+        mock_client.chat.completions.create.side_effect = [bad_resp, final_resp]
 
         patches = _patch_settings_for_openai(mock_client)
         with patches[0], patches[1], patches[2]:
-            result = _run(chat_service.run_chat(
+            result = chat_service.run_chat(
                 [{"role": "user", "content": "DROP all tables"}], db
-            ))
+            )
 
         assert isinstance(result["reply"], str)
-        # Find the LLM-dispatched unknown tool result
-        unknown = next(
-            (t for t in result["tool_results"] if t["tool"] == "drop_table_transactions"),
-            None,
-        )
-        assert unknown is not None
-        assert unknown["result"]["error"] == "unknown_tool"
+        # The tool result should have ok=False with unknown_tool error
+        assert result["tool_results"][0]["result"]["error"] == "unknown_tool"

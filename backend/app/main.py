@@ -12,9 +12,9 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Path as FPath
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
-from .chat_service import run_chat, stream_chat
+from .chat_service import run_chat
 from .config import settings
 from .db import get_db
 from .repository import METRIC_ALLOWLIST, get_business_metric, get_customer_purchases, get_customer_summary, get_product_stores, get_product_summary
@@ -138,48 +138,23 @@ def get_metric(
 # ── Chat ──────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
-async def chat(
+def chat(
     request: ChatRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> ChatResponse:
     """
-    Conversational endpoint (non-streaming, kept for backward-compat / tests).
+    Conversational endpoint.
+
+    Receives a message history, runs the LLM tool-calling loop,
+    and returns a natural-language answer grounded in retrieved data.
     """
     messages = [m.model_dump() for m in request.messages]
-    result = await run_chat(messages=messages, conn=conn)
+    result = run_chat(messages=messages, conn=conn)
     return ChatResponse(
         reply=result["reply"],
         structured=result.get("structured"),
         tool_results=result.get("tool_results", []),
         metadata=result.get("metadata", {}),
-    )
-
-
-@app.post("/api/chat/stream", tags=["Chat"])
-async def chat_stream(
-    request: ChatRequest,
-    conn: sqlite3.Connection = Depends(get_db),
-) -> StreamingResponse:
-    """
-    Streaming conversational endpoint using Server-Sent Events (SSE).
-
-    Emits JSON lines prefixed with 'data: ':
-      data: {"type": "token",     "content": "..."}
-      data: {"type": "tool_call", "tool": "...", "status": "running"}
-      data: {"type": "tool_done", "tool": "...", "ok": true}
-      data: {"type": "done",      "structured": {...}, "tool_results": [...], "metadata": {...}}
-      data: {"type": "error",     "message": "..."}
-    """
-    messages = [m.model_dump() for m in request.messages]
-
-    return StreamingResponse(
-        stream_chat(messages=messages, conn=conn),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
     )
 
 

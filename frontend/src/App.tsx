@@ -1,6 +1,6 @@
 // src/App.tsx
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { checkHealth, sendChatStream } from './api';
+import { checkHealth, sendChat } from './api';
 import ChatBubble from './components/ChatBubble';
 import TypingIndicator from './components/TypingIndicator';
 import type { ChatMessage, HealthResponse, ToolResult, StructuredResponse } from './types';
@@ -39,10 +39,6 @@ interface DisplayMessage {
   message: ChatMessage;
   toolResults?: ToolResult[];
   structured?: StructuredResponse | null;
-  /** true while streaming tokens into this bubble */
-  streaming?: boolean;
-  /** tool calls in flight for this message */
-  activeTools?: string[];
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -57,7 +53,6 @@ export default function App() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
-  const abortRef       = useRef<AbortController | null>(null);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -80,113 +75,40 @@ export default function App() {
     const content = (text ?? input).trim();
     if (!content || loading) return;
 
-    // Cancel any in-flight request
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setError(null);
 
-    const userMsg: ChatMessage = { role: 'user', content };
+    const userMsg: ChatMessage  = { role: 'user', content };
     const newHistory: ChatMessage[] = [...history, userMsg];
 
     setDisplayMessages(prev => [...prev, { id: `user-${Date.now()}`, message: userMsg }]);
     setHistory(newHistory);
     setLoading(true);
 
-    // Create a placeholder bot bubble that we'll stream into
-    const botId = `bot-${Date.now()}`;
-    const placeholderAssistant: ChatMessage = { role: 'assistant', content: '' };
+    try {
+      const response = await sendChat(newHistory);
+      const assistantMsg: ChatMessage = { role: 'assistant', content: response.reply };
 
-    setDisplayMessages(prev => [
-      ...prev,
-      {
-        id: botId,
-        message: placeholderAssistant,
-        streaming: true,
-        activeTools: [],
-      },
-    ]);
-
-    // Accumulate streamed text so we can update the bubble efficiently
-    let streamedContent = '';
-
-    await sendChatStream(
-      newHistory,
-      {
-        onToken(token) {
-          streamedContent += token;
-          setDisplayMessages(prev =>
-            prev.map(dm =>
-              dm.id === botId
-                ? { ...dm, message: { role: 'assistant', content: streamedContent } }
-                : dm,
-            ),
-          );
+      setHistory(prev => [...prev, assistantMsg]);
+      setDisplayMessages(prev => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          message: assistantMsg,
+          toolResults: response.tool_results,
+          structured:  response.structured,
         },
-
-        onToolCall(tool) {
-          setDisplayMessages(prev =>
-            prev.map(dm =>
-              dm.id === botId
-                ? { ...dm, activeTools: [...(dm.activeTools ?? []), tool] }
-                : dm,
-            ),
-          );
-        },
-
-        onToolDone(tool, _ok) {
-          setDisplayMessages(prev =>
-            prev.map(dm =>
-              dm.id === botId
-                ? {
-                    ...dm,
-                    activeTools: (dm.activeTools ?? []).filter(t => t !== tool),
-                  }
-                : dm,
-            ),
-          );
-        },
-
-        onDone(structured, toolResults, _metadata) {
-          // Parse answer text out of structured if we have it
-          const finalContent =
-            structured?.answer ?? streamedContent;
-
-          const assistantMsg: ChatMessage = { role: 'assistant', content: finalContent };
-
-          setHistory(prev => [...prev, assistantMsg]);
-          setDisplayMessages(prev =>
-            prev.map(dm =>
-              dm.id === botId
-                ? {
-                    ...dm,
-                    message:      assistantMsg,
-                    toolResults:  toolResults,
-                    structured:   structured,
-                    streaming:    false,
-                    activeTools:  [],
-                  }
-                : dm,
-            ),
-          );
-          setLoading(false);
-        },
-
-        onError(msg) {
-          // If aborted by user, silently ignore
-          if (controller.signal.aborted) return;
-          setError(msg);
-          // Remove empty placeholder bubble
-          setDisplayMessages(prev => prev.filter(dm => dm.id !== botId));
-          setHistory(prev => prev.slice(0, -1));
-          setLoading(false);
-        },
-      },
-      controller.signal,
-    );
+      ]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error
+        ? err.message
+        : 'Failed to reach the backend. Is the server running?';
+      setError(msg);
+      setHistory(prev => prev.slice(0, -1));
+    } finally {
+      setLoading(false);
+    }
   }, [input, history, loading]);
 
   const handleKeyDown = useCallback(
@@ -197,11 +119,9 @@ export default function App() {
   );
 
   const handleClear = useCallback(() => {
-    abortRef.current?.abort();
     setDisplayMessages([]);
     setHistory([]);
     setError(null);
-    setLoading(false);
   }, []);
 
   // Status dot
@@ -307,14 +227,9 @@ export default function App() {
                 message={dm.message}
                 toolResults={dm.toolResults}
                 structured={dm.structured}
-                streaming={dm.streaming}
-                activeTools={dm.activeTools}
               />
             ))}
-            {/* Only show TypingIndicator when truly waiting (before first token) */}
-            {loading && displayMessages[displayMessages.length - 1]?.message.content === '' && (
-              <TypingIndicator />
-            )}
+            {loading && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </div>
         )}
@@ -347,16 +262,10 @@ export default function App() {
               title="Send (Enter)"
               aria-label="Send message"
             >
-              {loading ? (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="6" y="6" width="12" height="12" rx="2"/>
-                </svg>
-              ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              )}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
             </button>
           </div>
           <p className={styles.hint}>

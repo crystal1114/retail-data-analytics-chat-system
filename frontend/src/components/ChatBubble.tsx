@@ -8,10 +8,6 @@ interface Props {
   message:      ChatMessage;
   toolResults?: ToolResult[];
   structured?:  StructuredResponse | null;
-  /** true while tokens are still being streamed in */
-  streaming?:   boolean;
-  /** tool names currently being called */
-  activeTools?: string[];
 }
 
 // ── Lightweight markdown: **bold** + newlines ────────────────────────────────
@@ -28,26 +24,6 @@ function formatContent(content: string): React.ReactNode {
       </React.Fragment>
     ));
   });
-}
-
-// ── Blinking cursor shown while streaming ────────────────────────────────────
-function StreamingCursor() {
-  return <span className={styles.streamingCursor} aria-hidden="true">▋</span>;
-}
-
-// ── Tool activity pill (shown while a tool is running) ───────────────────────
-function ToolActivity({ tools }: { tools: string[] }) {
-  if (!tools.length) return null;
-  return (
-    <div className={styles.toolActivity}>
-      <span className={styles.toolActivitySpinner} />
-      <span className={styles.toolActivityText}>
-        {tools.length === 1
-          ? `Fetching ${tools[0].replace(/_/g, ' ')}…`
-          : `Running ${tools.length} tool calls…`}
-      </span>
-    </div>
-  );
 }
 
 // ── Collapsed tool-call debug panel ─────────────────────────────────────────
@@ -85,16 +61,9 @@ function DebugPanel({ toolResults }: { toolResults: ToolResult[] }) {
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export default function ChatBubble({
-  message,
-  toolResults = [],
-  structured,
-  streaming = false,
-  activeTools = [],
-}: Props) {
+export default function ChatBubble({ message, toolResults = [], structured }: Props) {
   const isUser = message.role === 'user';
-  const hasViz = !streaming && structured && structured.viz_type !== 'none' && structured.chart_data;
-  const isEmpty = !message.content && streaming;
+  const hasViz = structured && structured.viz_type !== 'none' && structured.chart_data;
 
   return (
     <div className={`${styles.row} ${isUser ? styles.rowUser : styles.rowBot}`}>
@@ -105,32 +74,18 @@ export default function ChatBubble({
       </div>
 
       {/* Bubble */}
-      <div className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleBot} ${streaming ? styles.bubbleStreaming : ''}`}>
+      <div className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleBot}`}>
+        <div className={styles.content}>
+          {formatContent(message.content)}
+        </div>
 
-        {/* Content – show skeleton dots if we haven't received any tokens yet */}
-        {isEmpty ? (
-          <div className={styles.thinkingDots}>
-            <span /><span /><span />
-          </div>
-        ) : (
-          <div className={styles.content}>
-            {formatContent(message.content)}
-            {streaming && <StreamingCursor />}
-          </div>
-        )}
-
-        {/* Active tool calls */}
-        {!isUser && (streaming || activeTools.length > 0) && (
-          <ToolActivity tools={activeTools} />
-        )}
-
-        {/* Visualization — only rendered after streaming completes */}
+        {/* Visualization */}
         {!isUser && hasViz && (
           <ChartRenderer structured={structured!} />
         )}
 
         {/* Debug panel */}
-        {!isUser && !streaming && toolResults.length > 0 && (
+        {!isUser && toolResults.length > 0 && (
           <DebugPanel toolResults={toolResults} />
         )}
       </div>
