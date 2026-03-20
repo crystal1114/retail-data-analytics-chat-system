@@ -1,27 +1,92 @@
-/* TypingIndicator.module.css  —  Premium v3 */
+/* TypingIndicator.module.css */
+
+/* ── Container ───────────────────────────────────────────────────────────── */
 .wrap {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 13px 18px;
+  gap: 8px;
+  padding: 11px 16px;
   background: var(--color-panel);
-  border: 1px solid rgba(255,255,255,0.065);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 14px;
   border-bottom-left-radius: 4px;
   width: fit-content;
   align-self: flex-start;
-  animation: fadeUp 0.2s ease;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.04);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* slide-up fade-in on mount */
+  animation: fadeUp 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── "Thinking" label ────────────────────────────────────────────────────── */
+.label {
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--color-text-2);
+
+  /* flowing shimmer left → right */
+  background: linear-gradient(
+    90deg,
+    var(--color-text-2) 0%,
+    var(--color-accent-hi) 40%,
+    var(--color-text-2) 80%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+
+  animation: shimmer 2s linear infinite;
+}
+
+/* ── Dot group ───────────────────────────────────────────────────────────── */
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--color-accent);
-  animation: pulse-dot 1.4s ease-in-out infinite;
-  opacity: 0.3;
+  animation: bounce 1.3s ease-in-out infinite;
 }
 
-.dot:nth-child(2) { animation-delay: 0.18s; }
-.dot:nth-child(3) { animation-delay: 0.36s; }
+.dot:nth-child(1) { animation-delay: 0s;     }
+.dot:nth-child(2) { animation-delay: 0.18s;  }
+.dot:nth-child(3) { animation-delay: 0.36s;  }
+
+/* ── Keyframes ───────────────────────────────────────────────────────────── */
+
+/* mount: slide up + fade in */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* dots: bounce up and brighten, then settle */
+@keyframes bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* label: shimmer sweep */
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
