@@ -13,6 +13,11 @@ export interface ToolResult {
     data?: unknown;
     error?: string;
     message?: string;
+    truncated?: boolean;
+    has_more?: boolean;
+    total_rows?: number;
+    limit_injected?: boolean;
+    fallback_mode?: string | null;
   };
 }
 
@@ -65,11 +70,22 @@ export interface StructuredResponse {
   answer: string;
 }
 
+// ── Result metadata (truncation, pagination) ─────────────────────────────────
+
+export interface ResultMeta {
+  truncated?: boolean;
+  has_more?: boolean;
+  total_rows?: number;
+  limit_injected?: boolean;
+  fallback_mode?: 'broad_query' | 'timeout' | null;
+  warning?: string;
+}
+
 export interface ChatResponse {
   reply: string;
   structured: StructuredResponse | null;
   tool_results: ToolResult[];
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> & ResultMeta;
 }
 
 export interface HealthResponse {

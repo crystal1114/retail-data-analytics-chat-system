@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { checkHealth, sendChat } from './api';
 import ChatBubble from './components/ChatBubble';
 import TypingIndicator from './components/TypingIndicator';
-import type { ChatMessage, HealthResponse, ToolResult, StructuredResponse } from './types';
+import type { ChatMessage, HealthResponse, ToolResult, StructuredResponse, ResultMeta } from './types';
 import styles from './App.module.css';
 
 // ── Sidebar prompt list ──────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ interface DisplayMessage {
   message: ChatMessage;
   toolResults?: ToolResult[];
   structured?: StructuredResponse | null;
+  resultMeta?: ResultMeta;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -98,6 +99,14 @@ export default function App() {
           message: assistantMsg,
           toolResults: response.tool_results,
           structured:  response.structured,
+          resultMeta:  {
+            truncated:    !!response.metadata.truncated,
+            has_more:     !!response.metadata.has_more,
+            total_rows:   response.metadata.total_rows as number | undefined,
+            limit_injected: !!response.metadata.limit_injected,
+            fallback_mode: response.metadata.fallback_mode as ResultMeta['fallback_mode'],
+            warning:      response.metadata.warning as string | undefined,
+          },
         },
       ]);
     } catch (err: unknown) {
@@ -227,6 +236,7 @@ export default function App() {
                 message={dm.message}
                 toolResults={dm.toolResults}
                 structured={dm.structured}
+                resultMeta={dm.resultMeta}
               />
             ))}
             {loading && <TypingIndicator />}

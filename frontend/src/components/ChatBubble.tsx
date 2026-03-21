@@ -1,6 +1,6 @@
 // src/components/ChatBubble.tsx
 import React, { useState } from 'react';
-import type { ChatMessage, ToolResult, StructuredResponse } from '../types';
+import type { ChatMessage, ToolResult, StructuredResponse, ResultMeta } from '../types';
 import ChartRenderer from './ChartRenderer';
 import styles from './ChatBubble.module.css';
 
@@ -8,12 +8,12 @@ interface Props {
   message:      ChatMessage;
   toolResults?: ToolResult[];
   structured?:  StructuredResponse | null;
+  resultMeta?:  ResultMeta;
 }
 
 // ── Safety: extract clean text from content that may have leaked raw JSON ────
 function cleanContent(content: string): string {
   const trimmed = content.trim();
-  // If the whole message looks like a JSON object, try to pull the answer field
   if (trimmed.startsWith('{')) {
     try {
       const obj = JSON.parse(trimmed);
@@ -21,7 +21,6 @@ function cleanContent(content: string): string {
         return obj.answer;
       }
     } catch {
-      // Not valid JSON — could be truncated. Return a safe fallback.
       if (/"answer"\s*:/.test(trimmed)) {
         const m = trimmed.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
         if (m) return m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
@@ -48,6 +47,67 @@ function formatContent(content: string): React.ReactNode {
   });
 }
 
+// ── Truncation / pagination warning banner ───────────────────────────────────
+function TruncationBanner({ meta }: { meta: ResultMeta }) {
+  const { truncated, has_more, total_rows, limit_injected, fallback_mode, warning } = meta;
+
+  if (fallback_mode === 'timeout') {
+    return (
+      <div className={`${styles.banner} ${styles.bannerWarn}`}>
+        <span className={styles.bannerIcon}>⏱</span>
+        <span>
+          <strong>Query timed out.</strong>{' '}
+          The query was scanning too many rows. Try adding a filter or asking for an aggregate.
+        </span>
+      </div>
+    );
+  }
+
+  if (fallback_mode === 'broad_query') {
+    return (
+      <div className={`${styles.banner} ${styles.bannerInfo}`}>
+        <span className={styles.bannerIcon}>📋</span>
+        <span>
+          <strong>Showing a 5-row sample</strong>
+          {total_rows ? ` of ${total_rows.toLocaleString()} total rows` : ''}.{' '}
+          Ask a more specific question to get targeted results.
+        </span>
+      </div>
+    );
+  }
+
+  if (warning === 'max_tool_rounds_exceeded') {
+    return (
+      <div className={`${styles.banner} ${styles.bannerWarn}`}>
+        <span className={styles.bannerIcon}>⚠️</span>
+        <span>
+          <strong>Response incomplete</strong> — the query required too many steps.
+          Try rephrasing or simplifying your question.
+        </span>
+      </div>
+    );
+  }
+
+  if (truncated || limit_injected) {
+    const label = has_more && total_rows
+      ? `Showing a preview of ${total_rows.toLocaleString()} total rows`
+      : limit_injected
+        ? 'Results automatically limited to a preview'
+        : 'Results truncated to fit the response';
+    return (
+      <div className={`${styles.banner} ${styles.bannerInfo}`}>
+        <span className={styles.bannerIcon}>📄</span>
+        <span>
+          <strong>{label}.</strong>{' '}
+          Narrow your question with filters for complete results.
+        </span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ── Collapsed tool-call debug panel ─────────────────────────────────────────
 function DebugPanel({ toolResults }: { toolResults: ToolResult[] }) {
   const [open, setOpen] = useState(false);
@@ -72,7 +132,9 @@ function DebugPanel({ toolResults }: { toolResults: ToolResult[] }) {
               <span className={styles.debugBadge}>{tr.tool}</span>
               <span className={styles.debugArgs}>{JSON.stringify(tr.args)}</span>
               <span className={`${styles.debugStatus} ${tr.result.ok ? styles.ok : styles.err}`}>
-                {tr.result.ok ? '✓ ok' : '✗ err'}
+                {tr.result.ok
+                  ? `✓ ${tr.result.truncated ? 'rows (truncated)' : 'ok'}`
+                  : `✗ ${tr.result.error ?? 'err'}`}
               </span>
             </div>
           ))}
@@ -83,9 +145,15 @@ function DebugPanel({ toolResults }: { toolResults: ToolResult[] }) {
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export default function ChatBubble({ message, toolResults = [], structured }: Props) {
+export default function ChatBubble({ message, toolResults = [], structured, resultMeta }: Props) {
   const isUser = message.role === 'user';
   const hasViz = structured && structured.viz_type !== 'none' && structured.chart_data;
+  const showBanner = !isUser && resultMeta && (
+    resultMeta.truncated ||
+    resultMeta.limit_injected ||
+    resultMeta.fallback_mode ||
+    resultMeta.warning === 'max_tool_rounds_exceeded'
+  );
 
   return (
     <div className={`${styles.row} ${isUser ? styles.rowUser : styles.rowBot}`}>
@@ -97,6 +165,10 @@ export default function ChatBubble({ message, toolResults = [], structured }: Pr
 
       {/* Bubble */}
       <div className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleBot}`}>
+
+        {/* Truncation / timeout warning banner — above content */}
+        {showBanner && <TruncationBanner meta={resultMeta!} />}
+
         <div className={styles.content}>
           {formatContent(message.content)}
         </div>

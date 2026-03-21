@@ -165,3 +165,16 @@
   background: rgba(124,108,250,0.04);
   color: var(--color-text-1);
 }
+
+/* ── Table "more rows" footer ────────────────────────────────────── */
+.tableMore {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--color-text-3);
+  padding: 8px 12px;
+  border-top: 1px solid rgba(255,255,255,0.055);
+  background: rgba(255,255,255,0.02);
+  border-radius: 0 0 10px 10px;
+  letter-spacing: 0.1px;
+  font-style: italic;
+}

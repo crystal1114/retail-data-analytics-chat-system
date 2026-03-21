@@ -157,3 +157,41 @@
 
 .ok  { color: var(--color-success); }
 .err { color: var(--color-danger);  }
+
+/* ── Truncation / warning banners ────────────────────────────────── */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  border: 1px solid transparent;
+}
+
+/* Info — for truncation and broad-query redirects */
+.bannerInfo {
+  background: rgba(56,189,248,0.07);
+  border-color: rgba(56,189,248,0.18);
+  color: #93c5fd;
+}
+
+/* Warning — for timeouts and max_tool_rounds */
+.bannerWarn {
+  background: rgba(245,158,11,0.07);
+  border-color: rgba(245,158,11,0.20);
+  color: #fcd34d;
+}
+
+.bannerIcon {
+  flex-shrink: 0;
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+.banner strong {
+  font-weight: 600;
+  color: inherit;
+}

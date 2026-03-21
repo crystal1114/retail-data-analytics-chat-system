@@ -158,6 +158,11 @@ function DataTable({ data }: { data: ChartData }) {
   const normaliseCell = (cell: string | number) =>
     typeof cell === 'string' ? cell.replace(/\n/g, ', ') : cell;
 
+  // Cap table preview at 25 rows — never render the full dataset
+  const MAX_TABLE_ROWS = 25;
+  const displayRows = rows.slice(0, MAX_TABLE_ROWS);
+  const hiddenCount = rows.length - displayRows.length;
+
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table}>
@@ -165,11 +170,16 @@ function DataTable({ data }: { data: ChartData }) {
           <tr>{columns.map((col, i) => <th key={i}>{col}</th>)}</tr>
         </thead>
         <tbody>
-          {rows.map((row, ri) => (
+          {displayRows.map((row, ri) => (
             <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{normaliseCell(cell)}</td>)}</tr>
           ))}
         </tbody>
       </table>
+      {hiddenCount > 0 && (
+        <div className={styles.tableMore}>
+          +{hiddenCount} more row{hiddenCount !== 1 ? 's' : ''} — narrow your query for complete results
+        </div>
+      )}
     </div>
   );
 }

@@ -5,20 +5,20 @@ NL → SQL → Answer pipeline.
 
 Architecture:
   1. User message arrives.
-  2. LLM is given the table schema and told to call execute_sql() with a
+  2. Broad-query guard: if the message matches "show all data / all transactions"
+     patterns, bypass the LLM and return a summary+sample directly.
+  3. LLM is given the table schema and told to call execute_sql() with a
      SELECT statement that answers the question.
-  3. The SQL is validated (SELECT-only guard) and run against SQLite.
-  4. Query results are injected back into the conversation.
-  5. LLM produces a final structured JSON response with a natural-language
-     answer AND a visualization spec (chart_data).
+  4. The SQL is validated (SELECT-only guard), auto-limited, and run against SQLite.
+  5. If SQL times out, a friendly narrowing suggestion is returned immediately.
+  6. Query results (with truncation metadata) are injected back into conversation.
+  7. LLM produces a final structured JSON response.
 
 Why LLM-generated SQL is appropriate here:
   - The dataset is public retail transaction data (owned by the operator).
   - The system is used for internal business analytics over known data.
-  - The goal is maximum query flexibility — pre-canned repository functions
-    cannot answer arbitrary slice-and-dice questions.
-  - The SQL executor enforces a hard SELECT-only guard so no mutations
-    can occur regardless of what the LLM generates.
+  - The goal is maximum query flexibility.
+  - The SQL executor enforces a hard SELECT-only guard; no mutations can occur.
 """
 
 from __future__ import annotations
@@ -34,7 +34,14 @@ except ImportError:
     OpenAI = None  # type: ignore[assignment,misc]
 
 from .config import settings
-from .sql_tool import TOOL_DEFINITIONS, SCHEMA, dispatch
+from .sql_tool import (
+    TOOL_DEFINITIONS,
+    SCHEMA,
+    PREVIEW_ROWS,
+    dispatch,
+    is_broad_query,
+    broad_query_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +117,6 @@ YOUR WORKFLOW:
 
    ⚠️ For "revenue by store in STATE" queries, ALWAYS aggregate (GROUP BY + SUM) in a single query.
    Do NOT first select raw rows and then aggregate in a second round.
-   ALWAYS include the total in the same query using a subquery or window function, OR answer total + top stores in ONE query using UNION or a CTE.
    Correct pattern for "revenue for stores in Hawaii":
      SELECT store_location, ROUND(SUM(total_amount),2) AS revenue
      FROM transactions
@@ -124,6 +130,11 @@ YOUR WORKFLOW:
    ⚠️ EFFICIENCY — Write ONE query that answers the full question. Never run an exploratory
    query first and then a second aggregation query. If a question asks for "total + breakdown",
    compute both in a single SQL call using subqueries, CTEs (WITH), or SUM() OVER() windows.
+
+4. ROW LIMITS — The database has 100,000 rows. Raw-row queries without LIMIT are automatically
+   capped at {PREVIEW_ROWS} rows. When the result is truncated, acknowledge it in your answer
+   and suggest the user narrow the query (add a filter, date range, or category).
+   NEVER attempt to return or promise the full 100,000-row dataset.
 
 FINAL RESPONSE FORMAT — after receiving SQL results, return ONLY this JSON (no markdown):
 {{
@@ -160,6 +171,96 @@ IMPORTANT: Your final reply must be the JSON object only — no prose before or 
 """
 
 
+# ── Broad-query fallback ──────────────────────────────────────────────────────
+
+def _make_broad_query_response(summary_result: dict[str, Any]) -> dict[str, Any]:
+    """Convert the broad_query_summary dict into a full ChatResponse."""
+    s = summary_result.get("summary", {})
+    total = s.get("total_transactions", 0)
+    revenue = s.get("total_revenue", 0)
+    customers = s.get("unique_customers", 0)
+
+    answer = (
+        f"The transactions table contains **{total:,} rows** — too large to display in full. "
+        f"Here's a quick overview:\n\n"
+        f"• **Total revenue**: ${revenue:,.2f}\n"
+        f"• **Unique customers**: {customers:,}\n"
+        f"• **Date range**: {s.get('earliest_date', '?')} → {s.get('latest_date', '?')}\n\n"
+        f"Below is a 5-row sample. Try asking a more specific question like:\n"
+        f"  — *\"Show monthly revenue trend\"*\n"
+        f"  — *\"Which product category earns the most?\"*\n"
+        f"  — *\"Top 10 customers by spend\"*"
+    )
+
+    chart_data = {
+        "columns": summary_result.get("columns", []),
+        "rows": summary_result.get("rows", []),
+    }
+
+    structured = {
+        "intent": "kpi_query",
+        "viz_type": "table",
+        "insight": f"Dataset has {total:,} transactions. Showing a 5-row sample.",
+        "chart_data": chart_data,
+        "answer": answer,
+    }
+
+    return {
+        "reply": answer,
+        "structured": structured,
+        "tool_results": [],
+        "metadata": {
+            "pipeline": "nl_to_sql",
+            "fallback_mode": "broad_query",
+            "truncated": True,
+            "total_rows": total,
+            "has_more": True,
+            "warning": "broad_query_redirected",
+        },
+    }
+
+
+# ── Timeout fallback ──────────────────────────────────────────────────────────
+
+_TIMEOUT_SUGGESTIONS = [
+    "Add a date range filter (e.g. year 2024 or a specific month)",
+    "Filter by a product category (Books, Electronics, Clothing, Home Decor)",
+    "Filter by payment method (Cash, Credit Card, Debit Card, PayPal)",
+    "Filter by state abbreviation (e.g. WHERE store_location LIKE '%, CA %')",
+    "Ask for an aggregate (total revenue, average order value) instead of raw rows",
+]
+
+def _make_timeout_response(
+    tool_results_log: list[dict],
+    model: str,
+    rounds: int,
+) -> dict[str, Any]:
+    suggestions = "\n".join(f"  • {s}" for s in _TIMEOUT_SUGGESTIONS)
+    reply = (
+        "The query took too long and was stopped to protect performance. "
+        "This usually happens when scanning all 100,000 rows without a filter.\n\n"
+        f"**Try narrowing your question:**\n{suggestions}"
+    )
+    return {
+        "reply": reply,
+        "structured": {
+            "intent": "custom_query",
+            "viz_type": "none",
+            "insight": "Query timed out — too broad without filters.",
+            "chart_data": None,
+            "answer": reply,
+        },
+        "tool_results": tool_results_log,
+        "metadata": {
+            "model": model,
+            "tool_rounds": rounds,
+            "warning": "query_timeout",
+            "fallback_mode": "timeout",
+            "pipeline": "nl_to_sql",
+        },
+    }
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def run_chat(
@@ -174,8 +275,8 @@ def run_chat(
         {
             "reply":        str,
             "structured":   dict | None,
-            "tool_results": list[dict],   # SQL queries + results for debug panel
-            "metadata":     dict,
+            "tool_results": list[dict],
+            "metadata":     dict,          # includes truncated, total_rows, has_more, fallback_mode
         }
     """
     if not settings.openai_configured:
@@ -194,6 +295,19 @@ def run_chat(
             "metadata": {"error": "openai_not_installed"},
         }
 
+    # ── Broad-query interception (before LLM call) ────────────────────────────
+    user_text = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            user_text = m.get("content", "")
+            break
+
+    if is_broad_query(user_text):
+        logger.info("Broad query detected — returning summary+sample: %r", user_text[:80])
+        summary_result = broad_query_summary(conn)
+        return _make_broad_query_response(summary_result)
+
+    # ── LLM tool-calling loop ─────────────────────────────────────────────────
     client = _get_client()
 
     full_messages: list[dict[str, Any]] = [
@@ -203,6 +317,8 @@ def run_chat(
 
     tool_results_log: list[dict[str, Any]] = []
     rounds = 0
+    # Collect metadata from tool calls for pass-through
+    result_meta: dict[str, Any] = {}
 
     while rounds < max_tool_rounds:
         rounds += 1
@@ -243,6 +359,7 @@ def run_chat(
                     "tool_rounds": rounds,
                     "finish_reason": finish_reason,
                     "pipeline": "nl_to_sql",
+                    **result_meta,
                 },
             }
 
@@ -254,19 +371,36 @@ def run_chat(
             except (json.JSONDecodeError, TypeError):
                 tool_args = {}
 
-            # Log the SQL being run for the debug panel
             sql_preview = tool_args.get("sql", "")
             description = tool_args.get("description", tool_name)
             logger.info("SQL [round %d]: %s", rounds, sql_preview)
 
             tool_result = dispatch(tool_name, tool_args, conn)
 
+            # ── Timeout: abort immediately with friendly message ──────────────
+            if tool_result.get("error") == "timeout":
+                logger.warning("SQL timeout at round %d: %s", rounds, sql_preview[:100])
+                tool_results_log.append({
+                    "tool": tool_name,
+                    "args": {"sql": sql_preview, "description": description},
+                    "result": tool_result,
+                })
+                return _make_timeout_response(tool_results_log, settings.openai_model, rounds)
+
+            # ── Collect truncation metadata for pass-through ─────────────────
+            if tool_result.get("ok"):
+                if tool_result.get("truncated"):
+                    result_meta["truncated"] = True
+                if tool_result.get("has_more"):
+                    result_meta["has_more"] = True
+                if tool_result.get("total_rows") is not None:
+                    result_meta["total_rows"] = tool_result["total_rows"]
+                if tool_result.get("limit_injected"):
+                    result_meta["limit_injected"] = True
+
             tool_results_log.append({
                 "tool": tool_name,
-                "args": {
-                    "sql": sql_preview,
-                    "description": description,
-                },
+                "args": {"sql": sql_preview, "description": description},
                 "result": tool_result,
             })
 
@@ -292,6 +426,7 @@ def run_chat(
             "tool_rounds": rounds,
             "warning": "max_tool_rounds_exceeded",
             "pipeline": "nl_to_sql",
+            **result_meta,
         },
     }
 
@@ -328,7 +463,6 @@ def _parse_structured_response(raw: str) -> dict[str, Any] | None:
         pass
 
     # 3. Find the outermost balanced { ... } block using brace counting
-    #    This correctly handles nested objects (chart_data rows etc.)
     start = text.find("{")
     if start >= 0:
         depth = 0
@@ -358,7 +492,7 @@ def _parse_structured_response(raw: str) -> dict[str, Any] | None:
                             return parsed
                     except (json.JSONDecodeError, ValueError):
                         pass
-                    break  # only try outermost block
+                    break
 
     return None
 
@@ -373,7 +507,6 @@ def _safe_reply(raw: str, structured: dict[str, Any] | None) -> str:
     if structured:
         return structured.get("answer", raw) or raw
 
-    # Last-resort: if raw starts with '{', try to pull 'answer' key out
     stripped = raw.strip()
     if stripped.startswith("{"):
         try:
@@ -382,7 +515,6 @@ def _safe_reply(raw: str, structured: dict[str, Any] | None) -> str:
                 return str(obj["answer"])
         except (json.JSONDecodeError, ValueError):
             pass
-        # Still looks like raw JSON but can't parse — return a fallback
         return "I couldn't format this response properly. Please try again."
 
     return raw
