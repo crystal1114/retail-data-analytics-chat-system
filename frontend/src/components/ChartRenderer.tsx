@@ -154,6 +154,10 @@ function DataTable({ data }: { data: ChartData }) {
   const rows    = data.rows    || [];
   if (!columns.length || !rows.length) return null;
 
+  // Normalise cell values: replace embedded newlines (store addresses) with ", "
+  const normaliseCell = (cell: string | number) =>
+    typeof cell === 'string' ? cell.replace(/\n/g, ', ') : cell;
+
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table}>
@@ -162,7 +166,7 @@ function DataTable({ data }: { data: ChartData }) {
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
+            <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{normaliseCell(cell)}</td>)}</tr>
           ))}
         </tbody>
       </table>

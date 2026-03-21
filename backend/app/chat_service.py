@@ -232,7 +232,7 @@ def run_chat(
         if finish_reason == "stop" or not assistant_msg.tool_calls:
             raw_content = assistant_msg.content or ""
             structured = _parse_structured_response(raw_content)
-            reply = structured.get("answer", raw_content) if structured else raw_content
+            reply = _safe_reply(raw_content, structured)
 
             return {
                 "reply": reply,
@@ -299,10 +299,19 @@ def run_chat(
 # ── JSON parser ───────────────────────────────────────────────────────────────
 
 def _parse_structured_response(raw: str) -> dict[str, Any] | None:
-    """Extract and validate structured JSON from LLM output."""
+    """
+    Extract and validate structured JSON from LLM output.
+
+    Handles:
+    - Pure JSON string
+    - JSON wrapped in ```json ... ``` fences
+    - JSON preceded/followed by prose (extracts the outermost {...} block)
+    - Nested braces (finds the outermost balanced { ... } block)
+    """
     if not raw:
         return None
 
+    # 1. Strip markdown code fences
     text = raw.strip()
     if text.startswith("```"):
         lines = text.split("\n")
@@ -310,6 +319,7 @@ def _parse_structured_response(raw: str) -> dict[str, Any] | None:
         inner = inner.rsplit("```", 1)[0]
         text = inner.strip()
 
+    # 2. Try parsing the whole text as JSON
     try:
         parsed = json.loads(text)
         if isinstance(parsed, dict) and "answer" in parsed:
@@ -317,15 +327,62 @@ def _parse_structured_response(raw: str) -> dict[str, Any] | None:
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # Fallback: extract first {...} block
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start >= 0 and end > start:
-        try:
-            parsed = json.loads(raw[start:end])
-            if isinstance(parsed, dict) and "answer" in parsed:
-                return parsed
-        except (json.JSONDecodeError, ValueError):
-            pass
+    # 3. Find the outermost balanced { ... } block using brace counting
+    #    This correctly handles nested objects (chart_data rows etc.)
+    start = text.find("{")
+    if start >= 0:
+        depth = 0
+        in_string = False
+        escape_next = False
+        for i, ch in enumerate(text[start:], start):
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == "\\" and in_string:
+                escape_next = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start:i + 1]
+                    try:
+                        parsed = json.loads(candidate)
+                        if isinstance(parsed, dict) and "answer" in parsed:
+                            return parsed
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                    break  # only try outermost block
 
     return None
+
+
+def _safe_reply(raw: str, structured: dict[str, Any] | None) -> str:
+    """
+    Always return a clean natural-language reply string.
+    If structured parse succeeded, use the 'answer' field.
+    If it failed but raw looks like JSON, extract 'answer' from it.
+    Otherwise return raw as-is.
+    """
+    if structured:
+        return structured.get("answer", raw) or raw
+
+    # Last-resort: if raw starts with '{', try to pull 'answer' key out
+    stripped = raw.strip()
+    if stripped.startswith("{"):
+        try:
+            obj = json.loads(stripped)
+            if isinstance(obj, dict) and "answer" in obj:
+                return str(obj["answer"])
+        except (json.JSONDecodeError, ValueError):
+            pass
+        # Still looks like raw JSON but can't parse — return a fallback
+        return "I couldn't format this response properly. Please try again."
+
+    return raw

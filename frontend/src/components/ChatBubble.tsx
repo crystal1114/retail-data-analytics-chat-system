@@ -10,9 +10,31 @@ interface Props {
   structured?:  StructuredResponse | null;
 }
 
+// ── Safety: extract clean text from content that may have leaked raw JSON ────
+function cleanContent(content: string): string {
+  const trimmed = content.trim();
+  // If the whole message looks like a JSON object, try to pull the answer field
+  if (trimmed.startsWith('{')) {
+    try {
+      const obj = JSON.parse(trimmed);
+      if (obj && typeof obj === 'object' && typeof obj.answer === 'string') {
+        return obj.answer;
+      }
+    } catch {
+      // Not valid JSON — could be truncated. Return a safe fallback.
+      if (/"answer"\s*:/.test(trimmed)) {
+        const m = trimmed.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        if (m) return m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+      }
+    }
+  }
+  return content;
+}
+
 // ── Lightweight markdown: **bold** + newlines ────────────────────────────────
 function formatContent(content: string): React.ReactNode {
-  const parts = content.split(/(\*\*[^*]+\*\*)/g);
+  const safe  = cleanContent(content);
+  const parts = safe.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
