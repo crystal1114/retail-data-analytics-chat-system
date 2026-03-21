@@ -12,16 +12,17 @@ from the query results.
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Architecture & Technical Decisions](#architecture--technical-decisions)
-3. [Dataset & Real ID Formats](#dataset--real-id-formats)
-4. [Setup Instructions](#setup-instructions)
-5. [Running the Backend](#running-the-backend)
-6. [Running the Frontend](#running-the-frontend)
-7. [Running Tests](#running-tests)
-8. [API Reference](#api-reference)
-9. [Example Chat Prompts](#example-chat-prompts)
-10. [Known Limitations](#known-limitations)
-11. [Future Improvements](#future-improvements)
+2. [Demo](#demo)
+3. [Architecture & Technical Decisions](#architecture--technical-decisions)
+4. [Dataset & Real ID Formats](#dataset--real-id-formats)
+5. [Setup Instructions](#setup-instructions)
+6. [Running the Backend](#running-the-backend)
+7. [Running the Frontend](#running-the-frontend)
+8. [Running Tests](#running-tests)
+9. [API Reference](#api-reference)
+10. [Example Chat Prompts](#example-chat-prompts)
+11. [Known Limitations](#known-limitations)
+12. [Future Improvements](#future-improvements)
 
 ---
 
@@ -41,6 +42,30 @@ The system answers three categories of questions:
 * **Customer queries** – purchase history, total spend, favourite products
 * **Product queries** – revenue, units sold, average discount, stores
 * **Business metrics** – KPIs, monthly revenue trends, category breakdown, store rankings
+
+---
+
+## Demo
+
+### Welcome screen — suggested prompts to get started
+
+![Welcome screen](docs/screenshots/welcome.jpg)
+
+### Monthly revenue trend — line chart visualization
+
+![Monthly revenue line chart](docs/screenshots/chart-line.jpg)
+
+### Payment method breakdown — pie chart with follow-up question
+
+![Payment breakdown pie chart](docs/screenshots/chart-pie.jpg)
+
+### Customer purchase history — table with transaction details
+
+![Customer purchase history table](docs/screenshots/table-history.jpg)
+
+### Multi-turn conversation — follow-up resolves "they" to the previous customer, with KPI card
+
+![Follow-up conversation with KPI card](docs/screenshots/followup-kpi.jpg)
 
 ---
 
