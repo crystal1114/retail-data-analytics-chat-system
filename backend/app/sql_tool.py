@@ -118,26 +118,63 @@ CREATE TABLE transactions (
     price            REAL,               -- unit price before discount
     transaction_date TEXT,               -- format: 'M/D/YYYY H:MM'  e.g. '3/11/2024 18:51'
     payment_method   TEXT,               -- 'Cash' | 'Credit Card' | 'Debit Card' | 'PayPal'
-    store_location   TEXT,               -- full address string
+    store_location   TEXT,               -- multi-line: street\\nCity, STATE ZIP  e.g. '123 Main St\\nSpringfield, IL 62701'
+                                         -- STATE is a 2-letter US abbreviation: HI=Hawaii, CA=California, NY=New York, TX=Texas, etc.
+                                         -- NEVER filter by full state name — always use the 2-letter code e.g. LIKE '%, HI %'
     product_category TEXT,               -- 'Books' | 'Clothing' | 'Electronics' | 'Home Decor'
     discount_pct     REAL,               -- e.g. 15.94 means 15.94% discount
     total_amount     REAL                -- quantity * price * (1 - discount_pct/100)
 );
 -- 100,000 rows covering 2023-2024
--- Date parsing: use strftime('%Y-%m', substr(transaction_date, instr(transaction_date,'/')+length(...)...))
--- Easier month extraction: printf('%04d-%02d', ...) or use the helper below
--- Recommended month grouping:
---   printf('%04d-%02d',
---     CAST(substr(transaction_date, instr(transaction_date,'/',-1,2)+1, 4) AS INT),
---     CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT)
---   )
--- Simpler alternative that works reliably for this dataset:
---   substr('0'||CAST(CAST(substr(transaction_date,1,instr(transaction_date,'/')-1) AS INT) AS TEXT),-1)
--- BEST approach for month grouping on this dataset:
---   strftime('%Y-%m', printf('%04d-%02d-%02d',
---     CAST(substr(transaction_date, length(transaction_date)-8) AS INT),
+
+-- ══ DATE HELPERS (transaction_date is 'M/D/YYYY H:MM', NOT ISO — strftime() needs conversion) ══
+
+-- Extract year:   CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT)
+-- Extract month:  CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT)
+-- Extract day:    CAST(substr(transaction_date, instr(transaction_date,'/')+1, instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)
+
+-- ISO date string (required before ANY strftime call):
+--   printf('%04d-%02d-%02d',
+--     CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT),
 --     CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT),
---     1))
+--     CAST(substr(transaction_date, instr(transaction_date,'/')+1, instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)
+--   )  →  e.g. '2024-03-11'
+
+-- Month label (GROUP BY month):
+--   printf('%04d-%02d',
+--     CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT),
+--     CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT))
+
+-- Day of week (0=Sunday … 6=Saturday):
+--   strftime('%w', printf('%04d-%02d-%02d',
+--     CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT),
+--     CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT),
+--     CAST(substr(transaction_date, instr(transaction_date,'/')+1, instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)))
+
+-- Day name CASE:
+--   CASE strftime('%w', <iso_expr>)
+--     WHEN '0' THEN 'Sunday' WHEN '1' THEN 'Monday' WHEN '2' THEN 'Tuesday'
+--     WHEN '3' THEN 'Wednesday' WHEN '4' THEN 'Thursday' WHEN '5' THEN 'Friday'
+--     WHEN '6' THEN 'Saturday' END
+
+-- ══ CANONICAL EXAMPLE QUERIES ══
+
+-- Transactions by day of week (all 7 days, alias AFTER expression):
+--   SELECT
+--     CASE strftime('%w', printf('%04d-%02d-%02d',
+--         CAST(substr(transaction_date,instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1,4) AS INT),
+--         CAST(substr(transaction_date,1,instr(transaction_date,'/')-1) AS INT),
+--         CAST(substr(transaction_date,instr(transaction_date,'/')+1,instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)))
+--       WHEN '0' THEN 'Sunday' WHEN '1' THEN 'Monday' WHEN '2' THEN 'Tuesday'
+--       WHEN '3' THEN 'Wednesday' WHEN '4' THEN 'Thursday'
+--       WHEN '5' THEN 'Friday'   WHEN '6' THEN 'Saturday' END AS day_name,
+--     COUNT(*) AS tx_count
+--   FROM transactions GROUP BY day_name ORDER BY tx_count DESC
+
+-- Revenue by store in Hawaii (aggregate in one query, never raw rows):
+--   SELECT store_location, ROUND(SUM(total_amount),2) AS revenue
+--   FROM transactions WHERE store_location LIKE '%, HI %'
+--   GROUP BY store_location ORDER BY revenue DESC LIMIT 20
 """.strip()
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
@@ -146,16 +183,24 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "execute_sql",
             "description": (
-                "Execute a read-only SELECT query against the retail transactions database "
-                "to answer analytics questions. The database contains 100,000 retail "
-                "transactions from 2023-2024.\n\n"
-                "IMPORTANT date handling: transaction_date is stored as 'M/D/YYYY H:MM' "
-                "(e.g. '3/11/2024 18:51'). To group by month use:\n"
-                "  printf('%04d-%02d', "
-                "CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT), "
-                "CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT))\n"
-                "Or simpler: extract year with substr(transaction_date,-13,4) won't work reliably — "
-                "use the printf approach above.\n\n"
+                "Execute a read-only SELECT query against the retail transactions database.\n\n"
+
+                "⚠️ CRITICAL — transaction_date is stored as 'M/D/YYYY H:MM' (e.g. '3/11/2024 18:51').\n"
+                "strftime() only works on ISO dates. You MUST convert first using:\n"
+                "  ISO expr: printf('%04d-%02d-%02d',\n"
+                "    CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT),\n"
+                "    CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT),\n"
+                "    CAST(substr(transaction_date, instr(transaction_date,'/')+1, instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT))\n\n"
+
+                "Day of week: strftime('%w', <ISO_EXPR>) → '0'=Sunday … '6'=Saturday\n"
+                "Month label: printf('%04d-%02d', YEAR_INT, MONTH_INT)\n\n"
+
+                "⚠️ CRITICAL — store_location format is 'Street\\nCity, STATE ZIP'.\n"
+                "STATE is always a 2-letter US abbreviation. NEVER use full state names.\n"
+                "  Hawaii   → LIKE '%, HI %'\n"
+                "  California → LIKE '%, CA %'\n"
+                "  New York   → LIKE '%, NY %'\n\n"
+
                 "Only SELECT statements are allowed. Results capped at 500 rows."
             ),
             "parameters": {
@@ -163,10 +208,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "sql": {
                         "type": "string",
-                        "description": (
-                            "A valid SQLite SELECT statement. "
-                            "Only SELECT is allowed — no INSERT/UPDATE/DELETE/DROP/CREATE."
-                        ),
+                        "description": "A valid SQLite SELECT statement.",
                     },
                     "description": {
                         "type": "string",

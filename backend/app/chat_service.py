@@ -65,17 +65,65 @@ YOUR WORKFLOW:
 2. Call the execute_sql tool with that query.
 3. After receiving the results, produce a final JSON response (see format below).
 
-SQL GUIDELINES:
-- Always use strftime-safe month grouping for transaction_date (format: 'M/D/YYYY H:MM'):
-    Month label: printf('%04d-%02d',
-      CAST(substr(transaction_date,
-        instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT),
-      CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT))
-- For total revenue use SUM(total_amount), for avg order use AVG(total_amount).
-- Always ORDER results meaningfully (e.g. ORDER BY revenue DESC).
-- Use LIMIT where appropriate (top-N queries).
-- ROUND monetary values to 2 decimal places.
-- Only SELECT is allowed — the tool will reject anything else.
+══ CRITICAL SQL RULES ══
+
+1. DATE FORMAT — transaction_date is 'M/D/YYYY H:MM' (NOT ISO). strftime() returns NULL on raw dates.
+   You MUST always convert to ISO first:
+
+   ISO date expression (copy exactly):
+     printf('%04d-%02d-%02d',
+       CAST(substr(transaction_date,
+         instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1,4) AS INT),
+       CAST(substr(transaction_date,1,instr(transaction_date,'/')-1) AS INT),
+       CAST(substr(transaction_date,
+         instr(transaction_date,'/')+1,
+         instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT))
+
+   Month grouping:  printf('%04d-%02d', YEAR_INT, MONTH_INT)
+   Day of week:     strftime('%w', <ISO_EXPR>) → '0'=Sun, '1'=Mon … '6'=Sat
+   Day name:        CASE strftime('%w',<ISO_EXPR>) WHEN '0' THEN 'Sunday' WHEN '1' THEN 'Monday'
+                    WHEN '2' THEN 'Tuesday' WHEN '3' THEN 'Wednesday' WHEN '4' THEN 'Thursday'
+                    WHEN '5' THEN 'Friday' WHEN '6' THEN 'Saturday' END
+
+   ⚠️ COLUMN ALIAS ORDER — in SQLite the alias MUST come immediately after each expression.
+   CORRECT day-of-week query (copy this pattern exactly, get ALL 7 days not just the max):
+     SELECT
+       CASE strftime('%w', printf('%04d-%02d-%02d',
+           CAST(substr(transaction_date,instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1,4) AS INT),
+           CAST(substr(transaction_date,1,instr(transaction_date,'/')-1) AS INT),
+           CAST(substr(transaction_date,instr(transaction_date,'/')+1,instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)))
+         WHEN '0' THEN 'Sunday' WHEN '1' THEN 'Monday' WHEN '2' THEN 'Tuesday'
+         WHEN '3' THEN 'Wednesday' WHEN '4' THEN 'Thursday'
+         WHEN '5' THEN 'Friday' WHEN '6' THEN 'Saturday' END AS day_name,
+       COUNT(*) AS tx_count
+     FROM transactions
+     GROUP BY day_name
+     ORDER BY tx_count DESC
+
+2. STORE LOCATION — format is multi-line: 'Street\\nCity, STATE ZIP'
+   STATE is always a 2-letter US abbreviation. NEVER filter by full state name.
+   Examples:
+     Hawaii     → WHERE store_location LIKE '%, HI %'
+     California → WHERE store_location LIKE '%, CA %'
+     New York   → WHERE store_location LIKE '%, NY %'
+     Texas      → WHERE store_location LIKE '%, TX %'
+
+   ⚠️ For "revenue by store in STATE" queries, ALWAYS aggregate (GROUP BY + SUM) in a single query.
+   Do NOT first select raw rows and then aggregate in a second round.
+   ALWAYS include the total in the same query using a subquery or window function, OR answer total + top stores in ONE query using UNION or a CTE.
+   Correct pattern for "revenue for stores in Hawaii":
+     SELECT store_location, ROUND(SUM(total_amount),2) AS revenue
+     FROM transactions
+     WHERE store_location LIKE '%, HI %'
+     GROUP BY store_location
+     ORDER BY revenue DESC
+     LIMIT 20
+
+3. GENERAL — Always ORDER results meaningfully. ROUND monetary values to 2dp.
+   Use LIMIT for top-N queries. Only SELECT is allowed.
+   ⚠️ EFFICIENCY — Write ONE query that answers the full question. Never run an exploratory
+   query first and then a second aggregation query. If a question asks for "total + breakdown",
+   compute both in a single SQL call using subqueries, CTEs (WITH), or SUM() OVER() windows.
 
 FINAL RESPONSE FORMAT — after receiving SQL results, return ONLY this JSON (no markdown):
 {{
@@ -91,7 +139,7 @@ VIZ TYPE RULES:
 - Category/product comparison (2–8 groups) → bar_chart
 - Ranking / top-N → horizontal_bar_chart
 - Share / distribution / % breakdown → pie_chart
-- Customer purchase list, store detail → table
+- Customer purchase list, store detail, tabular results → table
 - Single metric or overall KPIs → kpi_card
 - Unclear or conversational → none
 
@@ -106,7 +154,7 @@ kpi_card:
   {{"kpis": [{{"label": "Total Revenue", "value": "$24,833,495", "icon": "💰"}}, ...]}}
 
 table:
-  {{"columns": ["Date","Product","Amount"], "rows": [["2024-01-15","A","$250.00"],...]}}
+  {{"columns": ["Store","Revenue"], "rows": [["123 Main St, Springfield, IL","$12345.67"],...]}}
 
 IMPORTANT: Your final reply must be the JSON object only — no prose before or after it.
 """
@@ -117,7 +165,7 @@ IMPORTANT: Your final reply must be the JSON object only — no prose before or 
 def run_chat(
     messages: list[dict[str, str]],
     conn: sqlite3.Connection,
-    max_tool_rounds: int = 4,
+    max_tool_rounds: int = 6,
 ) -> dict[str, Any]:
     """
     Execute one conversational turn using the NL→SQL→Answer pipeline.
