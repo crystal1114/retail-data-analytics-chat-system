@@ -71,3 +71,6 @@ logs/
 # Large data files
 *.csv
 data/*.csv
+
+# Local screen recording copy (large; not for Git — compress for README if needed)
+docs/screenshots/recording.mov

@@ -67,6 +67,14 @@ The system answers three categories of questions:
 
 ![Follow-up conversation with KPI card](docs/screenshots/followup-kpi.jpg)
 
+### KPI insights — overall business metrics with expandable SQL
+
+![KPI insights](docs/screenshots/kpi-insights.jpg)
+
+### Safety rails — broad-query interception with guided sample and suggestions
+
+![Safety rails](docs/screenshots/safety-rails.jpg)
+
 ---
 
 ## Architecture & Technical Decisions
