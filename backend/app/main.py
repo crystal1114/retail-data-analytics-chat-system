@@ -1,51 +1,57 @@
 """
 backend/app/main.py
 
-FastAPI application – route wiring and dependency setup.
+FastAPI application — route wiring and dependency setup.
+
+Data layer: LLM-generated SQL (NL → SQL → Answer pipeline).
+  - /api/chat   : conversational endpoint; LLM writes SELECT queries
+  - /api/health : readiness check
+  - /docs       : auto-generated Swagger UI
+
+The old pre-canned repository endpoints (/api/customers, /api/products,
+/api/metrics) have been removed.  All analytics are now served through
+the flexible /api/chat endpoint using LLM-generated SQL.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
-from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Path as FPath
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from .chat_service import run_chat
 from .config import settings
 from .db import get_db
-from .repository import METRIC_ALLOWLIST, get_business_metric, get_customer_purchases, get_customer_summary, get_product_stores, get_product_summary
-from .schemas import ChatRequest, ChatResponse, DataEnvelope, HealthResponse
+from .schemas import ChatRequest, ChatResponse, HealthResponse
 
-# ── App setup ────────────────────────────────────────────────────────────────────
+# ── App setup ─────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Retail Data Analytics Chat System",
     description=(
-        "AI-powered retail analytics: ask questions in natural language "
-        "about customers, products, and business metrics."
+        "AI-powered retail analytics using LLM-generated SQL. "
+        "Ask any question in natural language — the assistant translates it "
+        "to SQL, queries the retail dataset, and returns a grounded answer "
+        "with charts and visualizations."
     ),
-    version="1.0.0",
+    version="2.0.0",
 )
 
-# Allow frontend (Vite dev server) to call the backend during development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # Tighten in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ── Health ────────────────────────────────────────────────────────────────────────
+# ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/health", response_model=HealthResponse, tags=["System"])
 def health_check() -> HealthResponse:
-    """Basic health / readiness check."""
+    """Readiness check — verifies DB file exists and OpenAI key is set."""
     db_path = settings.resolved_db_path
     db_status = "ok" if db_path.exists() else "missing"
     return HealthResponse(
@@ -55,87 +61,7 @@ def health_check() -> HealthResponse:
     )
 
 
-# ── Customers ─────────────────────────────────────────────────────────────────────
-
-@app.get("/api/customers/{customer_id}", response_model=DataEnvelope, tags=["Customers"])
-def get_customer(
-    customer_id: str = FPath(..., description="Numeric customer ID, e.g. 109318"),
-    conn: sqlite3.Connection = Depends(get_db),
-) -> DataEnvelope:
-    """
-    Returns a summary and recent purchases for the given customer.
-    Combines get_customer_summary + get_customer_purchases(limit=10).
-    """
-    summary = get_customer_summary(conn, customer_id)
-    if not summary["ok"]:
-        raise HTTPException(status_code=404, detail=summary["message"])
-
-    purchases = get_customer_purchases(conn, customer_id, limit=10)
-    recent = purchases.get("data", []) if purchases["ok"] else []
-
-    return DataEnvelope(
-        ok=True,
-        data={
-            **summary["data"],
-            "recent_purchases": recent,
-        },
-    )
-
-
-# ── Products ──────────────────────────────────────────────────────────────────────
-
-@app.get("/api/products/{product_id}", response_model=DataEnvelope, tags=["Products"])
-def get_product(
-    product_id: str = FPath(..., description="Product ID: A, B, C, or D"),
-    conn: sqlite3.Connection = Depends(get_db),
-) -> DataEnvelope:
-    """
-    Returns a summary and store list for the given product.
-    Combines get_product_summary + get_product_stores.
-    """
-    summary = get_product_summary(conn, product_id.upper())
-    if not summary["ok"]:
-        raise HTTPException(status_code=404, detail=summary["message"])
-
-    stores = get_product_stores(conn, product_id.upper())
-    store_list = stores.get("data", []) if stores["ok"] else []
-
-    return DataEnvelope(
-        ok=True,
-        data={
-            **summary["data"],
-            "stores": store_list,
-        },
-    )
-
-
-# ── Metrics ───────────────────────────────────────────────────────────────────────
-
-@app.get("/api/metrics/{metric_name}", response_model=DataEnvelope, tags=["Metrics"])
-def get_metric(
-    metric_name: str = FPath(
-        ...,
-        description=(
-            "One of: "
-            + ", ".join(sorted(METRIC_ALLOWLIST))
-        ),
-    ),
-    limit: int = 10,
-    conn: sqlite3.Connection = Depends(get_db),
-) -> DataEnvelope:
-    """
-    Returns structured business metric data.
-    metric_name must be in the fixed allowlist.
-    """
-    result = get_business_metric(conn, metric_name, limit=limit)
-    if not result["ok"]:
-        status = 400 if result.get("error") == "invalid_metric" else 404
-        raise HTTPException(status_code=status, detail=result["message"])
-
-    return DataEnvelope(ok=True, data=result["data"])
-
-
-# ── Chat ──────────────────────────────────────────────────────────────────────────
+# ── Chat ──────────────────────────────────────────────────────────────────────
 
 @app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
 def chat(
@@ -143,10 +69,11 @@ def chat(
     conn: sqlite3.Connection = Depends(get_db),
 ) -> ChatResponse:
     """
-    Conversational endpoint.
+    Conversational analytics endpoint.
 
-    Receives a message history, runs the LLM tool-calling loop,
-    and returns a natural-language answer grounded in retrieved data.
+    The LLM translates the user's natural-language question into a SQLite
+    SELECT statement, executes it against the retail transactions table,
+    then returns a grounded natural-language answer with a visualization spec.
     """
     messages = [m.model_dump() for m in request.messages]
     result = run_chat(messages=messages, conn=conn)
@@ -158,12 +85,12 @@ def chat(
     )
 
 
-# ── Root ──────────────────────────────────────────────────────────────────────────
+# ── Root ──────────────────────────────────────────────────────────────────────
 
 @app.get("/", tags=["System"])
 def root() -> dict[str, str]:
     return {
-        "message": "Retail Analytics API",
+        "message": "Retail Analytics API v2 — NL→SQL pipeline",
         "docs": "/docs",
         "health": "/api/health",
     }

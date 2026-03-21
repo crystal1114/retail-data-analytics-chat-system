@@ -1,29 +1,60 @@
-# backend/tests/test_chat_service.py
 """
-B. Chat orchestration tests
+backend/tests/test_chat_service.py
 
-Uses unittest.mock to stub the OpenAI client so no real API calls are made.
+Unit tests for the NL→SQL chat service.
+All OpenAI calls are mocked — no live API needed.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any
-from unittest.mock import MagicMock, patch, PropertyMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.app import chat_service
+import backend.app.chat_service as chat_service
+from backend.app.chat_service import _parse_structured_response, run_chat
 
 
-# ── Helpers to build mock OpenAI responses ────────────────────────────────────────
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def db():
+    """In-memory SQLite with minimal transactions data."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id TEXT, product_id TEXT, quantity INTEGER,
+            price REAL, transaction_date TEXT, payment_method TEXT,
+            store_location TEXT, product_category TEXT,
+            discount_pct REAL, total_amount REAL
+        )
+    """)
+    conn.executemany(
+        "INSERT INTO transactions VALUES (NULL,?,?,?,?,?,?,?,?,?,?)",
+        [
+            ("C001", "A", 2, 50.0, "1/15/2024 10:00", "Cash",
+             "123 Main St", "Electronics", 10.0, 90.00),
+            ("C002", "B", 1, 30.0, "2/20/2024 11:00", "PayPal",
+             "456 Oak Ave", "Books", 5.0, 28.50),
+            ("C001", "B", 3, 20.0, "3/5/2024 9:00", "Cash",
+             "789 Pine Rd", "Books", 0.0, 60.00),
+        ],
+    )
+    conn.commit()
+    yield conn
+    conn.close()
+
 
 def _make_stop_response(content: str) -> MagicMock:
-    """Simulate a model response that produces a direct text reply."""
+    """Build a mock OpenAI completion response with finish_reason='stop'."""
     msg = MagicMock()
     msg.content = content
-    msg.tool_calls = []
+    msg.tool_calls = None
     msg.model_dump.return_value = {"role": "assistant", "content": content}
 
     choice = MagicMock()
@@ -35,21 +66,25 @@ def _make_stop_response(content: str) -> MagicMock:
     return resp
 
 
-def _make_tool_call_response(
-    tool_name: str, tool_args: dict[str, Any], call_id: str = "call_1"
-) -> MagicMock:
-    """Simulate a model response that requests a tool call."""
+def _make_tool_call_response(tool_name: str, args: dict) -> MagicMock:
+    """Build a mock response that triggers a tool call."""
+    func = MagicMock()
+    func.name = tool_name
+    func.arguments = json.dumps(args)
+
     tc = MagicMock()
-    tc.id = call_id
-    tc.function.name = tool_name
-    tc.function.arguments = json.dumps(tool_args)
+    tc.id = "tc_test_001"
+    tc.function = func
 
     msg = MagicMock()
     msg.content = None
     msg.tool_calls = [tc]
     msg.model_dump.return_value = {
         "role": "assistant",
-        "tool_calls": [{"id": call_id, "function": {"name": tool_name, "arguments": json.dumps(tool_args)}}],
+        "tool_calls": [
+            {"id": "tc_test_001", "type": "function",
+             "function": {"name": tool_name, "arguments": json.dumps(args)}}
+        ],
     }
 
     choice = MagicMock()
@@ -61,256 +96,170 @@ def _make_tool_call_response(
     return resp
 
 
-# ── Context manager helper ────────────────────────────────────────────────────────
+# ── SQL safety tests ──────────────────────────────────────────────────────────
 
-def _patch_settings_for_openai(mock_client):
-    """
-    Return a list of context managers that:
-    - Replace the module-level OpenAI class with one that returns mock_client
-    - Patch settings.openai_api_key so openai_configured returns True
-    """
-    return [
-        patch("backend.app.chat_service.OpenAI", return_value=mock_client),
-        patch.object(type(chat_service.settings), "openai_configured",
-                     new_callable=PropertyMock, return_value=True),
-        patch.object(chat_service.settings, "openai_api_key", "sk-fake"),
-    ]
+class TestSqlSafety:
+    def test_select_allowed(self, db):
+        from backend.app.sql_tool import run_sql
+        result = run_sql("SELECT COUNT(*) AS n FROM transactions", db)
+        assert result["ok"] is True
+        assert result["rows"][0][0] == 3
 
+    def test_insert_blocked(self, db):
+        from backend.app.sql_tool import run_sql
+        result = run_sql("INSERT INTO transactions (customer_id) VALUES ('X')", db)
+        assert result["ok"] is False
+        assert result["error"] == "unsafe_sql"
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────────
+    def test_drop_blocked(self, db):
+        from backend.app.sql_tool import run_sql
+        result = run_sql("DROP TABLE transactions", db)
+        assert result["ok"] is False
 
-@pytest.fixture
-def db() -> sqlite3.Connection:
-    """Minimal in-memory DB for chat orchestration tests."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.executescript("""
-        CREATE TABLE transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_id TEXT NOT NULL,
-            product_id TEXT NOT NULL,
-            quantity INTEGER,
-            price REAL,
-            transaction_date TEXT,
-            payment_method TEXT,
-            store_location TEXT,
-            product_category TEXT,
-            discount_pct REAL,
-            total_amount REAL
-        );
-        INSERT INTO transactions VALUES
-          (1, 'C001', 'A', 2, 50.00, '1/15/2024 10:00', 'Cash',
-           '123 Main St\nSpringfield, IL', 'Electronics', 10.0, 90.00),
-          (2, 'C002', 'B', 1, 30.00, '2/20/2024 11:00', 'PayPal',
-           '456 Oak Ave\nShelbyville, IL', 'Books', 5.0, 28.50);
-    """)
-    conn.commit()
-    yield conn
-    conn.close()
+    def test_update_blocked(self, db):
+        from backend.app.sql_tool import run_sql
+        result = run_sql("UPDATE transactions SET total_amount=0", db)
+        assert result["ok"] is False
+
+    def test_multiple_statements_blocked(self, db):
+        from backend.app.sql_tool import run_sql
+        result = run_sql("SELECT 1; DROP TABLE transactions", db)
+        assert result["ok"] is False
+
+    def test_sql_error_returns_ok_false(self, db):
+        from backend.app.sql_tool import run_sql
+        result = run_sql("SELECT * FROM nonexistent_table", db)
+        assert result["ok"] is False
+        assert result["error"] == "sql_error"
 
 
-# ── No API key ────────────────────────────────────────────────────────────────────
+# ── chat_service unit tests ───────────────────────────────────────────────────
 
-class TestNoApiKey:
-    def test_returns_graceful_message(self, db: sqlite3.Connection):
-        with patch.object(type(chat_service.settings), "openai_configured",
-                          new_callable=PropertyMock, return_value=False):
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "Hello"}], db
-            )
-        assert result["reply"] != ""
-        assert "OpenAI" in result["reply"] or "key" in result["reply"].lower()
+class TestRunChat:
+
+    def test_no_api_key_returns_error(self, db, monkeypatch):
+        monkeypatch.setattr("backend.app.chat_service.settings.openai_api_key", "")
+        chat_service._client = None
+        result = run_chat([{"role": "user", "content": "hello"}], db)
         assert result["metadata"]["error"] == "no_api_key"
+        assert "API key" in result["reply"]
 
+    def test_openai_not_installed_returns_error(self, db, monkeypatch):
+        monkeypatch.setattr("backend.app.chat_service.OpenAI", None)
+        monkeypatch.setattr("backend.app.chat_service.settings.openai_api_key", "sk-test-key")
+        chat_service._client = None
+        result = run_chat([{"role": "user", "content": "hello"}], db)
+        assert result["metadata"]["error"] == "openai_not_installed"
 
-# ── Customer flow ─────────────────────────────────────────────────────────────────
-
-class TestCustomerFlow:
-    def test_customer_summary_tool_called(self, db: sqlite3.Connection):
-        """LLM requests get_customer_summary → result fed back → final answer."""
-        tool_resp = _make_tool_call_response(
-            "get_customer_summary", {"customer_id": "C001"}
-        )
-        final_resp = _make_stop_response("Customer C001 has 1 transaction totaling $90.")
+    def test_sql_tool_flow(self, db, monkeypatch):
+        """LLM calls execute_sql, gets results, returns structured answer."""
+        sql = "SELECT SUM(total_amount) AS total FROM transactions"
+        structured_reply = json.dumps({
+            "intent": "kpi_query",
+            "viz_type": "kpi_card",
+            "insight": "Total revenue is $178.50.",
+            "chart_data": {"kpis": [{"label": "Total Revenue", "value": "$178.50", "icon": "💰"}]},
+            "answer": "The total revenue across all transactions is $178.50.",
+        })
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
+        mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_response("execute_sql", {"sql": sql, "description": "total revenue"}),
+            _make_stop_response(structured_reply),
+        ]
 
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "Tell me about customer C001"}], db
-            )
+        monkeypatch.setattr("backend.app.chat_service.settings.openai_api_key", "sk-test-key")
+        chat_service._client = mock_client
 
-        assert result["reply"] == "Customer C001 has 1 transaction totaling $90."
+        result = run_chat([{"role": "user", "content": "What is the total revenue?"}], db)
+
+        assert result["reply"] == "The total revenue across all transactions is $178.50."
+        assert result["structured"]["viz_type"] == "kpi_card"
         assert len(result["tool_results"]) == 1
-        assert result["tool_results"][0]["tool"] == "get_customer_summary"
+        assert result["tool_results"][0]["tool"] == "execute_sql"
+        assert result["tool_results"][0]["result"]["ok"] is True
+        assert result["metadata"]["tool_rounds"] == 2
 
-    def test_customer_purchases_tool_called(self, db: sqlite3.Connection):
-        tool_resp = _make_tool_call_response(
-            "get_customer_purchases", {"customer_id": "C001", "limit": 20}
-        )
-        final_resp = _make_stop_response("C001 bought product A.")
-
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
-
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "What has customer C001 purchased?"}], db
-            )
-
-        assert "C001" in result["reply"]
-
-
-# ── Product flow ──────────────────────────────────────────────────────────────────
-
-class TestProductFlow:
-    def test_product_summary_tool_called(self, db: sqlite3.Connection):
-        tool_resp = _make_tool_call_response(
-            "get_product_summary", {"product_id": "A"}
-        )
-        final_resp = _make_stop_response("Product A has 1 transaction.")
+    def test_direct_answer_no_tool(self, db, monkeypatch):
+        """LLM answers directly without calling a tool (e.g. clarification)."""
+        direct_reply = json.dumps({
+            "intent": "unsupported_query",
+            "viz_type": "none",
+            "insight": "Question is unclear.",
+            "chart_data": None,
+            "answer": "Could you clarify which customer you mean?",
+        })
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
+        mock_client.chat.completions.create.return_value = _make_stop_response(direct_reply)
 
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "Tell me about product A"}], db
-            )
+        monkeypatch.setattr("backend.app.chat_service.settings.openai_api_key", "sk-test-key")
+        chat_service._client = mock_client
 
-        assert result["tool_results"][0]["tool"] == "get_product_summary"
+        result = run_chat([{"role": "user", "content": "Tell me about the customer"}], db)
+        assert "clarify" in result["reply"].lower()
+        assert result["metadata"]["tool_rounds"] == 1
 
-    def test_product_stores_tool_called(self, db: sqlite3.Connection):
-        tool_resp = _make_tool_call_response(
-            "get_product_stores", {"product_id": "B"}
-        )
-        final_resp = _make_stop_response("Product B is sold in Shelbyville.")
-
+    def test_unsafe_sql_blocked_and_error_returned(self, db, monkeypatch):
+        """If LLM generates a write statement, it's blocked and error fed back."""
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
+        mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_response("execute_sql", {
+                "sql": "DELETE FROM transactions",
+                "description": "delete all"
+            }),
+            _make_stop_response(json.dumps({
+                "intent": "unsupported_query", "viz_type": "none",
+                "insight": "Cannot execute.", "chart_data": None,
+                "answer": "I cannot delete data from the database.",
+            })),
+        ]
 
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "Which stores sell product B?"}], db
-            )
+        monkeypatch.setattr("backend.app.chat_service.settings.openai_api_key", "sk-test-key")
+        chat_service._client = mock_client
 
-        assert result["tool_results"][0]["tool"] == "get_product_stores"
+        result = run_chat([{"role": "user", "content": "Delete all transactions"}], db)
+        # Tool result should show ok=False
+        assert result["tool_results"][0]["result"]["ok"] is False
+        assert result["tool_results"][0]["result"]["error"] == "unsafe_sql"
 
-
-# ── Business metric flow ──────────────────────────────────────────────────────────
-
-class TestBusinessMetricFlow:
-    def test_business_metric_tool_called(self, db: sqlite3.Connection):
-        tool_resp = _make_tool_call_response(
-            "get_business_metric", {"metric_name": "overall_kpis"}
-        )
-        final_resp = _make_stop_response("Total revenue is $118.50.")
-
+    def test_openai_error_handled_gracefully(self, db, monkeypatch):
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = [tool_resp, final_resp]
+        mock_client.chat.completions.create.side_effect = Exception("Connection error")
 
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "What is the total revenue?"}], db
-            )
+        monkeypatch.setattr("backend.app.chat_service.settings.openai_api_key", "sk-test-key")
+        chat_service._client = mock_client
 
-        assert result["tool_results"][0]["tool"] == "get_business_metric"
-        assert result["tool_results"][0]["args"]["metric_name"] == "overall_kpis"
+        result = run_chat([{"role": "user", "content": "Show revenue"}], db)
+        assert result["metadata"]["error"] == "openai_api_error"
+        assert "Connection error" in result["reply"]
 
 
-# ── Clarification flow ────────────────────────────────────────────────────────────
+# ── _parse_structured_response ────────────────────────────────────────────────
 
-class TestClarificationFlow:
-    def test_clarification_when_id_missing(self, db: sqlite3.Connection):
-        """Model returns a clarification question without calling any tool."""
-        final_resp = _make_stop_response(
-            "Could you please tell me which customer you mean?"
-        )
+class TestParseStructuredResponse:
+    def test_valid_json(self):
+        raw = json.dumps({
+            "intent": "kpi_query", "viz_type": "kpi_card",
+            "insight": "ok", "chart_data": None,
+            "answer": "Revenue is $100."
+        })
+        result = _parse_structured_response(raw)
+        assert result is not None
+        assert result["answer"] == "Revenue is $100."
 
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = final_resp
+    def test_json_in_code_fence(self):
+        raw = '```json\n{"intent":"kpi_query","viz_type":"none","insight":"","chart_data":null,"answer":"Hello"}\n```'
+        result = _parse_structured_response(raw)
+        assert result is not None
+        assert result["answer"] == "Hello"
 
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "How much did this customer spend?"}], db
-            )
+    def test_missing_answer_returns_none(self):
+        raw = json.dumps({"intent": "kpi_query", "viz_type": "none"})
+        assert _parse_structured_response(raw) is None
 
-        assert len(result["tool_results"]) == 0
-        assert "customer" in result["reply"].lower()
+    def test_empty_string_returns_none(self):
+        assert _parse_structured_response("") is None
 
-
-# ── Malformed tool arguments ──────────────────────────────────────────────────────
-
-class TestMalformedToolArgs:
-    def test_invalid_json_args_handled(self, db: sqlite3.Connection):
-        """If tool args are not valid JSON, the call should fail gracefully."""
-        tc = MagicMock()
-        tc.id = "call_bad"
-        tc.function.name = "get_customer_summary"
-        tc.function.arguments = "NOT_JSON{{{"
-
-        msg = MagicMock()
-        msg.content = None
-        msg.tool_calls = [tc]
-        msg.model_dump.return_value = {"role": "assistant"}
-
-        choice = MagicMock()
-        choice.finish_reason = "tool_calls"
-        choice.message = msg
-
-        bad_resp = MagicMock()
-        bad_resp.choices = [choice]
-
-        final_resp = _make_stop_response("Sorry, something went wrong.")
-
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = [bad_resp, final_resp]
-
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            # Should not raise
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "Tell me about customer X"}], db
-            )
-
-        assert isinstance(result["reply"], str)
-
-    def test_unknown_tool_handled(self, db: sqlite3.Connection):
-        """Unknown tool names must not crash the orchestrator."""
-        tc = MagicMock()
-        tc.id = "call_unk"
-        tc.function.name = "drop_table_transactions"
-        tc.function.arguments = json.dumps({"x": 1})
-
-        msg = MagicMock()
-        msg.content = None
-        msg.tool_calls = [tc]
-        msg.model_dump.return_value = {"role": "assistant"}
-
-        choice = MagicMock()
-        choice.finish_reason = "tool_calls"
-        choice.message = msg
-
-        bad_resp = MagicMock()
-        bad_resp.choices = [choice]
-        final_resp = _make_stop_response("I cannot do that.")
-
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = [bad_resp, final_resp]
-
-        patches = _patch_settings_for_openai(mock_client)
-        with patches[0], patches[1], patches[2]:
-            result = chat_service.run_chat(
-                [{"role": "user", "content": "DROP all tables"}], db
-            )
-
-        assert isinstance(result["reply"], str)
-        # The tool result should have ok=False with unknown_tool error
-        assert result["tool_results"][0]["result"]["error"] == "unknown_tool"
+    def test_plain_text_returns_none(self):
+        assert _parse_structured_response("Just a plain sentence.") is None
