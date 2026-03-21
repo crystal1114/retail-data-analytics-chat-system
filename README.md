@@ -12,19 +12,16 @@ from the query results.
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Architecture Summary](#architecture-summary)
-3. [Why SQLite?](#why-sqlite)
-4. [Natural language to SQL (data layer)](#natural-language-to-sql-data-layer)
-5. [Technical Decisions](#technical-decisions)
-6. [Dataset & Real ID Formats](#dataset--real-id-formats)
-7. [Setup Instructions](#setup-instructions)
-8. [Running the Backend](#running-the-backend)
-9. [Running the Frontend](#running-the-frontend)
-10. [Running Tests](#running-tests)
-11. [API Reference](#api-reference)
-12. [Example Chat Prompts](#example-chat-prompts)
-13. [Known Limitations](#known-limitations)
-14. [Future Improvements](#future-improvements)
+2. [Architecture & Technical Decisions](#architecture--technical-decisions)
+3. [Dataset & Real ID Formats](#dataset--real-id-formats)
+4. [Setup Instructions](#setup-instructions)
+5. [Running the Backend](#running-the-backend)
+6. [Running the Frontend](#running-the-frontend)
+7. [Running Tests](#running-tests)
+8. [API Reference](#api-reference)
+9. [Example Chat Prompts](#example-chat-prompts)
+10. [Known Limitations](#known-limitations)
+11. [Future Improvements](#future-improvements)
 
 ---
 
@@ -47,132 +44,16 @@ The system answers three categories of questions:
 
 ---
 
-## Architecture Summary
+## Architecture & Technical Decisions
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  React Frontend (Vite)  →  POST /api/chat  →  FastAPI       │
-│                                                              │
-│  FastAPI  ──►  chat_service.run_chat()                       │
-│                    │                                         │
-│                    ▼                                         │
-│          OpenAI Chat API — model drafts SQLite SELECT        │
-│                    │                                         │
-│          ◄── execute_sql(query) ───────────────────┐         │
-│                    │                              │         │
-│                    ▼                              │         │
-│          sql_tool.dispatch / run_sql()            │         │
-│          (SELECT-only guard, LIMIT, timeout)      │         │
-│                    │                              │         │
-│                    ▼                              │         │
-│          SQLite (`data/retail.db`)                │         │
-│                    │                              │         │
-│          rows + metadata ─────────────────────────┘         │
-│                    │                                         │
-│          final answer ◄── OpenAI (grounded in results)      │
-└──────────────────────────────────────────────────────────────┘
-```
+The LLM translates each question into a SQLite `SELECT`, the backend validates
+and executes it (SELECT-only, auto-LIMIT, query timeout), and the model returns
+a grounded answer from the results. SQLite was chosen for zero-infrastructure
+simplicity — one file, fast indexed reads, no server to manage.
 
-**Key modules:**
-
-| File | Responsibility |
-|---|---|
-| `scripts/ingest.py` | One-shot CSV → SQLite loader |
-| `backend/app/config.py` | `pydantic-settings` config singleton |
-| `backend/app/db.py` | SQLite connection factory & FastAPI dependency |
-| `backend/app/sql_tool.py` | Schema text for the LLM; `execute_sql` tool; validation, limits, timeouts |
-| `backend/app/chat_service.py` | NL → SQL orchestration loop; broad-query shortcut; final grounded reply |
-| `backend/app/main.py` | FastAPI app (`/api/health`, `/api/chat`), CORS |
-| `frontend/src/App.tsx` | React chat UI |
-
----
-
-## Why SQLite?
-
-* **Zero infrastructure** – no separate database server to install or manage
-* **Single file** – the entire dataset lives in `data/retail.db`, easy to copy/backup
-* **Fast reads** – indexed queries on 200 k rows respond in milliseconds
-* **Sufficient for analytics** – read-heavy workload with no concurrent writes
-* **Local reproducibility** – reviewers can run the full system without any cloud services
-
----
-
-## Natural language to SQL (data layer)
-
-The data path is intentionally flexible:
-
-1. **Natural language → SQL** – the LLM turns the user’s question into a SQLite
-   `SELECT` using the real table schema.
-2. **Execute against the dataset** – validated SQL runs on the retail
-   transactions database.
-3. **Grounded answers** – the model explains and summarizes **only** what the
-   query returned (plus truncation/timeout metadata), not invented rows or metrics.
-
-**Why this is an acceptable trade-off *here***
-
-* **Public dataset** – the underlying data is a well-known Kaggle retail
-  transaction set, not private customer PII in production.
-* **Internal / business analytics over owned data** – the intended deployment is
-  exploratory analytics on data the operator controls, not an open internet-facing
-  SQL console over sensitive records.
-* **Query flexibility and broader insights** – fixed canned APIs cannot cover every
-  ad-hoc question; NL → SQL unlocks follow-ups, comparisons, and one-off analyses
-  without shipping a new endpoint per intent.
-
-**Safety rails (defence in depth)**
-
-The executor in `sql_tool.py` still constrains what can run: **SELECT-only**
-queries, no multi-statement batches, automatic `LIMIT` on raw row dumps, row
-caps, query timeouts, and handling for overly broad “show me everything”
-requests. That does not eliminate every text-to-SQL risk in the abstract, but it
-aligns the architecture with the use case above.
-
----
-
-## Technical Decisions
-
-### Data Model
-
-A single denormalised `transactions` table with 10 columns mirrors the CSV exactly.
-Indexes on `customer_id`, `product_id`, and `transaction_date` cover all query patterns.
-Normalisation into separate customer/product tables would add complexity with no
-benefit for this read-only analytics use case.
-
-### SQL execution layer
-
-`sql_tool.py` validates LLM-produced SQL, executes it, and returns a uniform
-`{ "ok": bool, "data": ..., "error": ..., ... }` envelope (including truncation
-and timeout metadata). The chat service never runs raw user text as SQL; only
-strings that pass validation are executed.
-
-### LLM integration approach
-
-1. The system prompt embeds the database schema and strict SQL rules (e.g. date
-   handling for this dataset).
-2. A single OpenAI function tool, `execute_sql`, carries the generated `SELECT`.
-3. `chat_service.run_chat()` loops: model proposes SQL → tool runs on SQLite →
-   results return as `role=tool` messages → model emits the final grounded reply
-   (and optional structured chart payload).
-4. Broad “dump the whole table” style questions can be short-circuited before
-   SQL generation when they match heuristics in `chat_service` / `sql_tool`.
-
-### Intent and flexibility
-
-There is no separate intent classifier. The model chooses *what* to query from
-natural language, which supports paraphrases and follow-ups (“same chart but for
-last quarter”) without new backend routes for each phrasing.
-
-### Edge-Case Handling
-
-| Situation | Behaviour |
-|---|---|
-| Empty or invalid query result | LLM explains no matching data (or suggests narrowing) |
-| SQL validation failure | `execute_sql` returns `ok=False`; model surfaces the error |
-| Missing OPENAI_API_KEY | Graceful reply explaining the issue |
-| Ambiguous question | LLM asks a clarifying question or proposes a reasonable default |
-| Malformed tool JSON args | Parse errors caught; graceful error returned |
-| Query timeout / too many rows | Executor aborts or truncates; metadata explains limits |
-| Disallowed SQL (writes, multi-statement) | Blocked by `sql_tool` before execution |
+Full details — architecture diagram, module map, NL → SQL rationale, safety
+rails, data model, intent classification, edge-case table, tradeoffs, and the
+evaluation framework — are in [`docs/review_notes.md`](docs/review_notes.md).
 
 ---
 
@@ -244,8 +125,8 @@ DATABASE_PATH=data/retail.db    # relative to repo root
 
 **Env var precedence** (highest → lowest):
 1. Shell environment (`export OPENAI_API_KEY=...`)
-2. `backend/.env`
-3. `.env` (repo root)
+2. `.env` in the **repo root** (recommended; same file `start_backend.sh` sources)
+3. Optional `backend/.env` — if present, overrides the same keys from repo-root `.env`
 4. Built-in defaults
 
 ### 5. Download the dataset
@@ -328,6 +209,31 @@ pytest backend/tests/test_api.py -v
 # Run integration tests (requires OPENAI_API_KEY)
 pytest -m integration -v
 ```
+
+### Evaluation suite (requires OPENAI_API_KEY)
+
+37 golden cases test the full NL → SQL → Answer pipeline against a deterministic
+seed database. An optional LLM-as-judge tier scores answer quality on four
+dimensions (correctness, completeness, clarity, grounding).
+
+```bash
+# Deterministic assertions only (fast, no extra API cost):
+python backend/evals/run_eval.py
+
+# With LLM-as-judge scoring:
+python backend/evals/run_eval.py --judge
+
+# Single category (customer, product, kpi, trend, ranking, edge_case, ...):
+python backend/evals/run_eval.py --category customer
+
+# Via pytest (each case is a separate test item):
+pytest -m eval -v
+
+# With judge via pytest:
+EVAL_JUDGE=1 pytest -m eval -v
+```
+
+See `docs/review_notes.md` for detailed evaluation methodology and results.
 
 ---
 
@@ -440,12 +346,6 @@ User: Which stores carry it?
 
 ## Future Improvements
 
-- [ ] **Streaming responses** – use `stream=True` and SSE to render tokens as they arrive
-- [ ] **Charts** – render bar/line charts for metric results using Recharts or Chart.js
-- [ ] **Pagination** – add cursor-based pagination for large purchase history lists
-- [ ] **Session persistence** – store conversation history in localStorage or a backend session
-- [ ] **Multi-LLM support** – abstract the LLM client to support Anthropic, Ollama, etc.
+- [ ] **Streaming + progressive UI** – use `stream=True` with SSE so the user sees tokens as they arrive. For multi-round SQL queries, stream an intermediate "Querying…" status after each tool call so the UI never appears frozen. This removes the perception gap between a 2-second single-query answer and a 10-second multi-step analysis
 - [ ] **Caching** – add a simple TTL cache for expensive aggregate queries
-- [ ] **Authentication** – add API key or OAuth2 middleware
-- [ ] **Docker Compose** – single `docker-compose up` to start everything
-- [ ] **Product name mapping** – enrich the single-letter product IDs with descriptive names
+- [ ] **Multi-LLM support with intent-based routing** – abstract the LLM client to support Anthropic, Ollama, etc. Route queries by complexity: simple lookups and single-metric questions use a cheap, fast model (e.g. GPT-4o-mini, Haiku); complex multi-step analyses, comparisons, and trend interpretations use a larger model (e.g. GPT-4o, Sonnet)

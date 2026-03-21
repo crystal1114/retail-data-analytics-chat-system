@@ -5,9 +5,12 @@ Application configuration loaded via pydantic-settings.
 
 Precedence (highest → lowest):
   1. Shell environment variables
-  2. backend/.env file
-  3. repo-root .env file
+  2. Optional backend/.env (overrides duplicate keys from root)
+  3. Repo-root .env file
   4. Built-in defaults
+
+env_file is loaded as (root, backend) so a root-only .env is enough; if both
+exist, backend/.env wins on the same variable name.
 
 The DATABASE_PATH is resolved relative to the *repo root* when it is a
 relative path, so callers never need to worry about the current working

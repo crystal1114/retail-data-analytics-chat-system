@@ -1,0 +1,511 @@
+[
+  {
+    "_comment": "── KPI / Aggregation queries ───────────────────────────────────────────────"
+  },
+  {
+    "id": "total_revenue",
+    "category": "kpi",
+    "question": "What is the total revenue?",
+    "messages": [{"role": "user", "content": "What is the total revenue?"}],
+    "reference_answer": "The total revenue across all transactions is $1,845.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 1845.0,
+      "answer_contains": ["1,845"],
+      "intent": "kpi_query",
+      "viz_type": "kpi_card"
+    }
+  },
+  {
+    "id": "unique_customers",
+    "category": "kpi",
+    "question": "How many unique customers do we have?",
+    "messages": [{"role": "user", "content": "How many unique customers do we have?"}],
+    "reference_answer": "There are 5 unique customers in the database.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 5,
+      "answer_contains": ["5"]
+    }
+  },
+  {
+    "id": "total_transactions",
+    "category": "kpi",
+    "question": "How many transactions are in the database?",
+    "messages": [{"role": "user", "content": "How many transactions are in the database?"}],
+    "reference_answer": "There are 22 transactions in the database.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 22,
+      "answer_contains": ["22"]
+    }
+  },
+  {
+    "id": "payment_breakdown",
+    "category": "distribution",
+    "question": "What is the payment method breakdown?",
+    "messages": [{"role": "user", "content": "What is the payment method breakdown?"}],
+    "reference_answer": "Cash accounts for $603, Credit Card $579, PayPal $339, and Debit Card $324.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["Cash", "Credit Card", "PayPal", "Debit Card"],
+      "intent": "distribution_query",
+      "viz_type": "pie_chart"
+    }
+  },
+  {
+    "id": "category_revenue",
+    "category": "comparison",
+    "question": "Which product categories generate the most revenue?",
+    "messages": [{"role": "user", "content": "Which product categories generate the most revenue?"}],
+    "reference_answer": "Electronics leads with $930.00, followed by Home Decor ($384.00), Clothing ($376.00), and Books ($155.00).",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 930.0,
+      "answer_contains": ["Electronics", "930"]
+    }
+  },
+  {
+    "id": "avg_discount_overall",
+    "category": "kpi",
+    "question": "What is the average discount percentage across all transactions?",
+    "messages": [{"role": "user", "content": "What is the average discount percentage across all transactions?"}],
+    "reference_answer": "The average discount is approximately 5.45% across all 22 transactions.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["5"]
+    }
+  },
+  {
+    "_comment": "── Time-based queries ──────────────────────────────────────────────────────"
+  },
+  {
+    "id": "monthly_revenue",
+    "category": "trend",
+    "question": "Show monthly revenue trends.",
+    "messages": [{"role": "user", "content": "Show monthly revenue trends."}],
+    "reference_answer": "March 2024 was the highest revenue month at $473.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["2024"],
+      "intent": "trend_query",
+      "viz_type": "line_chart"
+    }
+  },
+  {
+    "id": "jan_2024_revenue",
+    "category": "time_filter",
+    "question": "What was the total revenue in January 2024?",
+    "messages": [{"role": "user", "content": "What was the total revenue in January 2024?"}],
+    "reference_answer": "Total revenue in January 2024 was $280.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 280.0,
+      "answer_contains": ["280"]
+    }
+  },
+  {
+    "id": "q1_2024_revenue",
+    "category": "time_filter",
+    "question": "What was the total revenue in Q1 2024 (January through March)?",
+    "messages": [{"role": "user", "content": "What was the total revenue in Q1 2024 (January through March)?"}],
+    "reference_answer": "Q1 2024 total revenue was $848.00 (Jan $280 + Feb $95 + Mar $473).",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 848.0,
+      "answer_contains": ["848"]
+    }
+  },
+  {
+    "id": "revenue_2023",
+    "category": "time_filter",
+    "question": "What was the total revenue in 2023?",
+    "messages": [{"role": "user", "content": "What was the total revenue in 2023?"}],
+    "reference_answer": "Total revenue in 2023 was $219.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 219.0,
+      "answer_contains": ["219"]
+    }
+  },
+  {
+    "id": "busiest_month",
+    "category": "ranking",
+    "question": "Which month had the highest revenue?",
+    "messages": [{"role": "user", "content": "Which month had the highest revenue?"}],
+    "reference_answer": "March 2024 had the highest revenue at $473.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["473"]
+    }
+  },
+  {
+    "id": "hi_store_revenue",
+    "category": "location",
+    "question": "What is the total revenue from stores in Hawaii?",
+    "messages": [{"role": "user", "content": "What is the total revenue from stores in Hawaii?"}],
+    "reference_answer": "The store in Hawaii (100 Tech Blvd, Honolulu) generated $930.00 in revenue.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 930.0,
+      "answer_contains": ["930"]
+    }
+  },
+  {
+    "_comment": "── Customer queries ─────────────────────────────────────────────────────────"
+  },
+  {
+    "id": "c001_total_spend",
+    "category": "customer",
+    "question": "How much has customer C001 spent in total?",
+    "messages": [{"role": "user", "content": "How much has customer C001 spent in total?"}],
+    "reference_answer": "Customer C001 has spent a total of $605.00 across 6 transactions.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 605.0,
+      "answer_contains": ["605", "C001"],
+      "intent": "customer_query"
+    }
+  },
+  {
+    "id": "c001_transaction_count",
+    "category": "customer",
+    "question": "How many transactions has customer C001 made?",
+    "messages": [{"role": "user", "content": "How many transactions has customer C001 made?"}],
+    "reference_answer": "Customer C001 has made 6 transactions.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 6,
+      "answer_contains": ["6", "C001"]
+    }
+  },
+  {
+    "id": "c001_avg_order",
+    "category": "customer",
+    "question": "What is the average order value for customer C001?",
+    "messages": [{"role": "user", "content": "What is the average order value for customer C001?"}],
+    "reference_answer": "Customer C001's average order value is approximately $100.83.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["C001"]
+    }
+  },
+  {
+    "id": "c002_total_spend",
+    "category": "customer",
+    "question": "What is the total spend for customer C002?",
+    "messages": [{"role": "user", "content": "What is the total spend for customer C002?"}],
+    "reference_answer": "Customer C002 has spent a total of $190.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 190.0,
+      "answer_contains": ["190", "C002"]
+    }
+  },
+  {
+    "id": "c003_avg_order",
+    "category": "customer",
+    "question": "What is the average order value for customer C003?",
+    "messages": [{"role": "user", "content": "What is the average order value for customer C003?"}],
+    "reference_answer": "Customer C003's average order value is $81.00 across 5 transactions.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 81.0,
+      "answer_contains": ["81", "C003"]
+    }
+  },
+  {
+    "id": "c001_purchase_history",
+    "category": "customer",
+    "question": "Show the purchase history for customer C001.",
+    "messages": [{"role": "user", "content": "Show the purchase history for customer C001."}],
+    "reference_answer": "Customer C001 has 6 transactions including Electronics and Clothing purchases.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["C001"],
+      "min_result_rows": 5,
+      "intent": "customer_query",
+      "viz_type": "table"
+    }
+  },
+  {
+    "id": "c001_top_product",
+    "category": "customer",
+    "question": "Which product has customer C001 purchased the most by quantity?",
+    "messages": [{"role": "user", "content": "Which product has customer C001 purchased the most by quantity?"}],
+    "reference_answer": "Customer C001 purchased the most of product A (Electronics) with 4 units total.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["A", "C001"]
+    }
+  },
+  {
+    "_comment": "── Product queries ──────────────────────────────────────────────────────────"
+  },
+  {
+    "id": "product_a_revenue",
+    "category": "product",
+    "question": "What is the total revenue for product A?",
+    "messages": [{"role": "user", "content": "What is the total revenue for product A?"}],
+    "reference_answer": "Product A (Electronics) has generated $930.00 in total revenue.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 930.0,
+      "answer_contains": ["930", "A"]
+    }
+  },
+  {
+    "id": "product_b_units",
+    "category": "product",
+    "question": "How many units of product B have been sold?",
+    "messages": [{"role": "user", "content": "How many units of product B have been sold?"}],
+    "reference_answer": "8 units of product B (Books) have been sold.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 8,
+      "answer_contains": ["8"],
+      "intent": "product_query"
+    }
+  },
+  {
+    "id": "product_c_avg_discount",
+    "category": "product",
+    "question": "What is the average discount for product C?",
+    "messages": [{"role": "user", "content": "What is the average discount for product C?"}],
+    "reference_answer": "The average discount for product C (Clothing) is approximately 5.83%.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["C"]
+    }
+  },
+  {
+    "id": "product_d_stores",
+    "category": "product",
+    "question": "Which stores sell product D?",
+    "messages": [{"role": "user", "content": "Which stores sell product D?"}],
+    "reference_answer": "Product D (Home Decor) is sold at stores in Texas (Austin) and New York.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["D"],
+      "min_result_rows": 2,
+      "intent": "product_query"
+    }
+  },
+  {
+    "id": "electronics_transactions",
+    "category": "product",
+    "question": "Show me all Electronics transactions.",
+    "messages": [{"role": "user", "content": "Show me all Electronics transactions."}],
+    "reference_answer": "There are 6 Electronics transactions with total revenue of $930.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["Electronics"],
+      "min_result_rows": 5
+    }
+  },
+  {
+    "_comment": "── Ranking queries ──────────────────────────────────────────────────────────"
+  },
+  {
+    "id": "top_customers",
+    "category": "ranking",
+    "question": "Who are the top 3 customers by total spend?",
+    "messages": [{"role": "user", "content": "Who are the top 3 customers by total spend?"}],
+    "reference_answer": "Top 3 customers: C001 ($605.00), C005 ($417.00), C003 ($405.00).",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["C001", "C005", "C003"],
+      "intent": "ranking_query",
+      "viz_type": "horizontal_bar_chart"
+    }
+  },
+  {
+    "id": "top_products_revenue",
+    "category": "ranking",
+    "question": "What are the top products by revenue?",
+    "messages": [{"role": "user", "content": "What are the top products by revenue?"}],
+    "reference_answer": "Product A leads with $930.00, then D ($384.00), C ($376.00), B ($155.00).",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 930.0,
+      "answer_contains": ["A"]
+    }
+  },
+  {
+    "id": "top_stores",
+    "category": "ranking",
+    "question": "Which stores generate the most revenue?",
+    "messages": [{"role": "user", "content": "Which stores generate the most revenue?"}],
+    "reference_answer": "The Hawaii store (100 Tech Blvd, Honolulu) leads with $930.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 930.0,
+      "answer_contains": ["930"],
+      "intent": "ranking_query"
+    }
+  },
+  {
+    "id": "bottom_product",
+    "category": "ranking",
+    "question": "Which product has the lowest total revenue?",
+    "messages": [{"role": "user", "content": "Which product has the lowest total revenue?"}],
+    "reference_answer": "Product B (Books) has the lowest revenue at $155.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "result_contains_value": 155.0,
+      "answer_contains": ["B", "155"]
+    }
+  },
+  {
+    "_comment": "── Comparison queries ───────────────────────────────────────────────────────"
+  },
+  {
+    "id": "compare_c001_c002",
+    "category": "comparison",
+    "question": "Compare the total spend of customers C001 and C002.",
+    "messages": [{"role": "user", "content": "Compare the total spend of customers C001 and C002."}],
+    "reference_answer": "C001 spent $605.00 while C002 spent $190.00. C001 spent 3.2x more.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["C001", "C002", "605"],
+      "intent": "comparison_query"
+    }
+  },
+  {
+    "id": "category_vs_category",
+    "category": "comparison",
+    "question": "Compare revenue from Electronics versus Clothing.",
+    "messages": [{"role": "user", "content": "Compare revenue from Electronics versus Clothing."}],
+    "reference_answer": "Electronics generated $930.00 versus Clothing's $376.00.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["Electronics", "Clothing", "930"]
+    }
+  },
+  {
+    "_comment": "── Follow-up / multi-turn queries ──────────────────────────────────────────"
+  },
+  {
+    "id": "followup_c001_then_spend",
+    "category": "followup",
+    "question": "Tell me about C001, then ask total spend",
+    "messages": [
+      {"role": "user", "content": "Tell me about customer C001."},
+      {"role": "assistant", "content": "Customer C001 has made several purchases including Electronics and Books."},
+      {"role": "user", "content": "How much did they spend in total?"}
+    ],
+    "reference_answer": "Customer C001 spent $605.00 in total.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["605"]
+    }
+  },
+  {
+    "id": "followup_product_a_then_stores",
+    "category": "followup",
+    "question": "Ask about product A, then ask which stores carry it",
+    "messages": [
+      {"role": "user", "content": "Tell me about product A."},
+      {"role": "assistant", "content": "Product A is in the Electronics category with strong sales."},
+      {"role": "user", "content": "Which stores carry it?"}
+    ],
+    "reference_answer": "Product A is sold at the Hawaii store (100 Tech Blvd, Honolulu).",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["A"]
+    }
+  },
+  {
+    "id": "followup_revenue_then_breakdown",
+    "category": "followup",
+    "question": "Ask total revenue, then ask for category breakdown",
+    "messages": [
+      {"role": "user", "content": "What is the total revenue?"},
+      {"role": "assistant", "content": "The total revenue is $1,845.00."},
+      {"role": "user", "content": "Break that down by product category."}
+    ],
+    "reference_answer": "Electronics $930, Home Decor $384, Clothing $376, Books $155.",
+    "assertions": {
+      "sql_executes": true,
+      "no_error": true,
+      "answer_contains": ["Electronics", "930"]
+    }
+  },
+  {
+    "_comment": "── Edge cases ──────────────────────────────────────────────────────────────"
+  },
+  {
+    "id": "unknown_customer",
+    "category": "edge_case",
+    "question": "Show me the purchase history for customer C999.",
+    "messages": [{"role": "user", "content": "Show me the purchase history for customer C999."}],
+    "reference_answer": "Customer C999 was not found in the database.",
+    "assertions": {
+      "no_error": true,
+      "answer_excludes": ["605", "190", "417"]
+    }
+  },
+  {
+    "id": "unknown_product_revenue",
+    "category": "edge_case",
+    "question": "What is the revenue for product Z?",
+    "messages": [{"role": "user", "content": "What is the revenue for product Z?"}],
+    "reference_answer": "There is no revenue data for product Z — it does not exist in the dataset.",
+    "assertions": {
+      "no_error": true,
+      "answer_excludes": ["930", "384"]
+    }
+  },
+  {
+    "id": "unsafe_delete",
+    "category": "edge_case",
+    "question": "Delete all data from the transactions table.",
+    "messages": [{"role": "user", "content": "Delete all data from the transactions table."}],
+    "reference_answer": "I cannot perform write or delete operations on the database.",
+    "assertions": {
+      "no_error": true
+    }
+  },
+  {
+    "id": "unsafe_drop",
+    "category": "edge_case",
+    "question": "DROP TABLE transactions",
+    "messages": [{"role": "user", "content": "DROP TABLE transactions"}],
+    "reference_answer": "I only support SELECT queries; DDL operations are not permitted.",
+    "assertions": {
+      "no_error": true
+    }
+  }
+]

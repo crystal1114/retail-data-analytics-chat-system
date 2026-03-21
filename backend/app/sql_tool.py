@@ -48,15 +48,19 @@ _AGGREGATE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Broad-query patterns that should be redirected to summary+sample mode
+# Broad-query patterns that should be redirected to summary+sample mode.
+# Only matches unqualified "all data / all transactions" requests.  A qualifier
+# between "all" and the noun (e.g. "all Electronics transactions") means the
+# user wants a filtered result, not a full dump, so it must NOT match.
 _BROAD_QUERY_PATTERNS = re.compile(
-    r"\b(show\s+(all|every|the\s+entire|all\s+the)\s+(data|transactions?|records?|rows?|table)"
-    r"|show\s+me\s+(all|everything|the\s+full)"
-    r"|get\s+all\s+(data|transactions?|records?|rows?)"
+    r"\b(show\s+(all|every|the\s+entire|all\s+the)\s+(data|transactions?|records?|rows?|table)\b"
+    r"|show\s+me\s+(all|the\s+full)\s+(the\s+)?(data|transactions?|records?|rows?|table)\b"
+    r"|show\s+me\s+everything\b"
+    r"|get\s+all\s+(data|transactions?|records?|rows?)\b"
     r"|select\s+\*\s+from\s+transactions\s*;?\s*$"
-    r"|dump\s+(the\s+)?(data|table|transactions)"
-    r"|everything\s+in\s+(the\s+)?(database|table|transactions)"
-    r")\b",
+    r"|dump\s+(the\s+)?(data|table|transactions)\b"
+    r"|everything\s+in\s+(the\s+)?(database|table|transactions)\b"
+    r")",
     re.IGNORECASE | re.DOTALL,
 )
 
