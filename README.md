@@ -2,8 +2,10 @@
 
 A production-quality, AI-powered retail analytics assistant that lets you ask
 natural-language questions about a retail transaction dataset through a chat
-interface — backed by a bounded tool-calling architecture that **never** lets
-the LLM generate or execute arbitrary SQL.
+interface. The LLM **translates questions into SQL**, the backend **executes
+that SQL** against the SQLite retail dataset, and the model returns **grounded
+natural-language answers** (and structured visualization hints) built only
+from the query results.
 
 ---
 
@@ -12,7 +14,7 @@ the LLM generate or execute arbitrary SQL.
 1. [Project Overview](#project-overview)
 2. [Architecture Summary](#architecture-summary)
 3. [Why SQLite?](#why-sqlite)
-4. [Why Bounded Tool-Calling Instead of Text-to-SQL?](#why-bounded-tool-calling)
+4. [Natural language to SQL (data layer)](#natural-language-to-sql-data-layer)
 5. [Technical Decisions](#technical-decisions)
 6. [Dataset & Real ID Formats](#dataset--real-id-formats)
 7. [Setup Instructions](#setup-instructions)
@@ -32,7 +34,7 @@ the LLM generate or execute arbitrary SQL.
 |---|---|
 | **Name** | Retail Data Analytics Chat System |
 | **Dataset** | Kaggle Retail Transaction Dataset (~200 k rows) |
-| **Backend** | FastAPI + Python, SQLite, OpenAI function calling |
+| **Backend** | FastAPI + Python, SQLite, OpenAI (NL → SQL via `execute_sql` tool) |
 | **Frontend** | React + Vite + TypeScript |
 | **LLM** | OpenAI GPT-4o-mini (configurable) |
 | **Data Store** | SQLite (`data/retail.db`) |
@@ -54,19 +56,20 @@ The system answers three categories of questions:
 │  FastAPI  ──►  chat_service.run_chat()                       │
 │                    │                                         │
 │                    ▼                                         │
-│          OpenAI Chat API (tool_choice="auto")                │
+│          OpenAI Chat API — model drafts SQLite SELECT        │
 │                    │                                         │
-│          ◄── tool_calls ──────────────────────────┐         │
+│          ◄── execute_sql(query) ───────────────────┐         │
 │                    │                              │         │
 │                    ▼                              │         │
-│          tools.dispatch_tool()                    │         │
+│          sql_tool.dispatch / run_sql()            │         │
+│          (SELECT-only guard, LIMIT, timeout)      │         │
 │                    │                              │         │
 │                    ▼                              │         │
-│          repository.py  ──►  SQLite DB            │         │
+│          SQLite (`data/retail.db`)                │         │
 │                    │                              │         │
-│          tool result ─────────────────────────────┘         │
+│          rows + metadata ─────────────────────────┘         │
 │                    │                                         │
-│          final answer ◄── OpenAI (grounded in tool data)    │
+│          final answer ◄── OpenAI (grounded in results)      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -77,10 +80,9 @@ The system answers three categories of questions:
 | `scripts/ingest.py` | One-shot CSV → SQLite loader |
 | `backend/app/config.py` | `pydantic-settings` config singleton |
 | `backend/app/db.py` | SQLite connection factory & FastAPI dependency |
-| `backend/app/repository.py` | All SQL (parameterised only) |
-| `backend/app/tools.py` | OpenAI function schemas + tool dispatcher |
-| `backend/app/chat_service.py` | LLM tool-calling orchestration loop |
-| `backend/app/main.py` | FastAPI app, routes, CORS |
+| `backend/app/sql_tool.py` | Schema text for the LLM; `execute_sql` tool; validation, limits, timeouts |
+| `backend/app/chat_service.py` | NL → SQL orchestration loop; broad-query shortcut; final grounded reply |
+| `backend/app/main.py` | FastAPI app (`/api/health`, `/api/chat`), CORS |
 | `frontend/src/App.tsx` | React chat UI |
 
 ---
@@ -95,24 +97,35 @@ The system answers three categories of questions:
 
 ---
 
-## Why Bounded Tool-Calling Instead of Text-to-SQL?
+## Natural language to SQL (data layer)
 
-Free-form text-to-SQL has three serious risks:
+The data path is intentionally flexible:
 
-1. **SQL injection via prompt** – a malicious user could craft a prompt that causes
-   the LLM to generate `DROP TABLE` or exfiltrate data.
-2. **Hallucinated columns / tables** – the LLM may invent schema names that do not
-   exist, causing runtime errors or misleading answers.
-3. **Unauditable queries** – it is impossible to review or test every SQL string the
-   LLM might produce.
+1. **Natural language → SQL** – the LLM turns the user’s question into a SQLite
+   `SELECT` using the real table schema.
+2. **Execute against the dataset** – validated SQL runs on the retail
+   transactions database.
+3. **Grounded answers** – the model explains and summarizes **only** what the
+   query returned (plus truncation/timeout metadata), not invented rows or metrics.
 
-This system uses **bounded tool-calling** instead:
+**Why this is an acceptable trade-off *here***
 
-* All SQL is written by engineers in `repository.py` with parameterised queries.
-* The LLM only picks a tool name (from a fixed list) and extracts scalar parameters
-  (e.g. a customer ID string).
-* There is no code path that passes user text into SQL execution.
-* Every possible query is unit-testable and auditable.
+* **Public dataset** – the underlying data is a well-known Kaggle retail
+  transaction set, not private customer PII in production.
+* **Internal / business analytics over owned data** – the intended deployment is
+  exploratory analytics on data the operator controls, not an open internet-facing
+  SQL console over sensitive records.
+* **Query flexibility and broader insights** – fixed canned APIs cannot cover every
+  ad-hoc question; NL → SQL unlocks follow-ups, comparisons, and one-off analyses
+  without shipping a new endpoint per intent.
+
+**Safety rails (defence in depth)**
+
+The executor in `sql_tool.py` still constrains what can run: **SELECT-only**
+queries, no multi-statement batches, automatic `LIMIT` on raw row dumps, row
+caps, query timeouts, and handling for overly broad “show me everything”
+requests. That does not eliminate every text-to-SQL risk in the abstract, but it
+aligns the architecture with the use case above.
 
 ---
 
@@ -125,40 +138,41 @@ Indexes on `customer_id`, `product_id`, and `transaction_date` cover all query p
 Normalisation into separate customer/product tables would add complexity with no
 benefit for this read-only analytics use case.
 
-### Repository Pattern
+### SQL execution layer
 
-`repository.py` acts as the sole data-access layer. Each function returns a typed
-`{ "ok": bool, "data": ..., "error": ..., "message": ... }` envelope, making
-success/failure handling uniform across routes and the chat service.
+`sql_tool.py` validates LLM-produced SQL, executes it, and returns a uniform
+`{ "ok": bool, "data": ..., "error": ..., ... }` envelope (including truncation
+and timeout metadata). The chat service never runs raw user text as SQL; only
+strings that pass validation are executed.
 
-### LLM Integration Approach
+### LLM integration approach
 
-1. The system prompt tells the model to use tools and never invent data.
-2. `TOOL_DEFINITIONS` is a static list of OpenAI function schemas mapping directly
-   to repository functions.
-3. The orchestration loop in `chat_service.run_chat()` runs until `finish_reason == "stop"`
-   or `max_tool_rounds` is reached.
-4. Tool results are serialised to JSON and fed back as `role=tool` messages.
+1. The system prompt embeds the database schema and strict SQL rules (e.g. date
+   handling for this dataset).
+2. A single OpenAI function tool, `execute_sql`, carries the generated `SELECT`.
+3. `chat_service.run_chat()` loops: model proposes SQL → tool runs on SQLite →
+   results return as `role=tool` messages → model emits the final grounded reply
+   (and optional structured chart payload).
+4. Broad “dump the whole table” style questions can be short-circuited before
+   SQL generation when they match heuristics in `chat_service` / `sql_tool`.
 
-### Intent Classification Approach
+### Intent and flexibility
 
-Intent classification is implicit: the LLM reads the user message and conversation
-history, then selects the appropriate tool. This is more robust than a hand-written
-classifier because:
-* The model understands paraphrases ("what did they buy?" after mentioning a customer).
-* New intents can be added by registering a new tool — no re-training needed.
+There is no separate intent classifier. The model chooses *what* to query from
+natural language, which supports paraphrases and follow-ups (“same chart but for
+last quarter”) without new backend routes for each phrasing.
 
 ### Edge-Case Handling
 
 | Situation | Behaviour |
 |---|---|
-| Customer/product not in DB | Repository returns `ok=False`; LLM reports clearly |
-| Invalid metric name | HTTP 400 + allowlist in error message |
+| Empty or invalid query result | LLM explains no matching data (or suggests narrowing) |
+| SQL validation failure | `execute_sql` returns `ok=False`; model surfaces the error |
 | Missing OPENAI_API_KEY | Graceful reply explaining the issue |
-| Ambiguous/missing IDs | LLM asks a clarifying question |
-| Malformed tool JSON args | `json.loads` exception caught; graceful error returned |
-| Unknown tool name | `dispatch_tool` returns `ok=False, error=unknown_tool` |
-| SQL injection attempt | Impossible — user text never reaches SQL execution |
+| Ambiguous question | LLM asks a clarifying question or proposes a reasonable default |
+| Malformed tool JSON args | Parse errors caught; graceful error returned |
+| Query timeout / too many rows | Executor aborts or truncates; metadata explains limits |
+| Disallowed SQL (writes, multi-statement) | Blocked by `sql_tool` before execution |
 
 ---
 
@@ -330,27 +344,12 @@ Returns backend status.
 }
 ```
 
-### `GET /api/customers/{customer_id}`
-Returns customer summary + recent 10 purchases.
-
-```
-GET /api/customers/109318
-```
-
-### `GET /api/products/{product_id}`
-Returns product summary + store list.
-
-```
-GET /api/products/A
-```
-
-### `GET /api/metrics/{metric_name}?limit=10`
-Returns a business metric. `metric_name` must be one of:
-`overall_kpis` · `revenue_by_store` · `top_products_by_revenue` ·
-`monthly_revenue` · `revenue_by_category` · `top_customers_by_spend` ·
-`payment_method_breakdown`
-
 ### `POST /api/chat`
+
+Primary analytics surface. The LLM generates SQL, the backend runs it on the
+retail database, and the response is grounded in those results.
+
+Request:
 ```json
 {
   "messages": [
@@ -358,10 +357,18 @@ Returns a business metric. `metric_name` must be one of:
   ]
 }
 ```
-Response:
+
+Response (fields may vary; `structured` holds optional chart/KPI payloads for the UI):
 ```json
 {
   "reply": "Customer 109318 has made ...",
+  "structured": {
+    "intent": "customer_history",
+    "viz_type": "table",
+    "insight": "...",
+    "chart_data": {},
+    "answer": "..."
+  },
   "tool_results": [...],
   "metadata": { "model": "gpt-4o-mini", "tool_rounds": 2 }
 }
@@ -423,7 +430,7 @@ User: Which stores carry it?
 3. **ProductID is a single letter (A–D)** – this is how the dataset is structured.
    There are only four distinct products.
 4. **No streaming** – the chat response waits for the full LLM completion before
-   rendering. Long tool-calling chains may feel slow.
+   rendering. Multiple SQL round-trips may feel slow on complex questions.
 5. **OpenAI-only** – the LLM layer is coupled to the OpenAI client. Swapping to
    Anthropic or a local model would require changes in `chat_service.py`.
 6. **No authentication** – the API has no authentication layer; do not expose it
