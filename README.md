@@ -56,43 +56,43 @@ pipeline (planner → executor → reporter) streamed in real time via SSE.
 
 ### Welcome screen — suggested prompts to get started
 
-Welcome screen
+![Welcome screen](docs/screenshots/welcome.jpg)
 
 ### Monthly revenue trend — line chart visualization
 
-Monthly revenue line chart
+![Monthly revenue line chart](docs/screenshots/chart-line.jpg)
 
 ### Payment method breakdown — pie chart with follow-up question
 
-Payment breakdown pie chart
+![Payment breakdown pie chart](docs/screenshots/chart-pie.jpg)
 
 ### Customer purchase history — table with transaction details
 
-Customer purchase history table
+![Customer purchase history table](docs/screenshots/table-history.jpg)
 
 ### Multi-turn conversation — follow-up resolves "they" to the previous customer, with KPI card
 
-Follow-up conversation with KPI card
+![Follow-up conversation with KPI card](docs/screenshots/followup-kpi.jpg)
 
 ### KPI insights — overall business metrics with expandable SQL
 
-KPI insights
+![KPI insights](docs/screenshots/kpi-insights.jpg)
 
 ### Safety rails — broad-query interception with guided sample and suggestions
 
-Safety rails
+![Safety rails](docs/screenshots/safety-rails.jpg)
 
 ### Thinking Mode — analysis prompt input
 
-Thinking Mode input
+![Thinking Mode input](docs/screenshots/thinking-input.jpg)
 
 ### Thinking Mode — real-time step execution progress
 
-Thinking Mode progress
+![Thinking Mode progress](docs/screenshots/thinking-progress.jpg)
 
 ### Thinking Mode — structured report with executive summary and tables
 
-Thinking Mode report
+![Thinking Mode report](docs/screenshots/thinking-report.jpg)
 
 ---
 
