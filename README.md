@@ -37,7 +37,7 @@ structured report with executive summary, findings, and tables via SSE.
 | **Dataset**    | Kaggle Retail Transaction Dataset (~200 k rows)                    |
 | **Backend**    | FastAPI + Python, SQLite, OpenAI (NL → SQL via `execute_sql` tool) |
 | **Frontend**   | React + Vite + TypeScript                                          |
-| **LLM**        | OpenAI GPT-4o-mini (configurable)                                  |
+| **LLM**        | OpenAI GPT-5 family (Chat: `gpt-5-mini`, Thinking: `gpt-5.4` + low reasoning effort) |
 | **Data Store** | SQLite (`data/retail.db`)                                          |
 
 
@@ -174,9 +174,14 @@ Edit `.env`:
 
 ```env
 OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-4o-mini        # or gpt-4o, gpt-3.5-turbo
+OPENAI_CHAT_MODEL=gpt-5-mini
+OPENAI_ANALYSIS_MODEL=gpt-5.4
+OPENAI_ANALYSIS_REASONING_EFFORT=low
 DATABASE_PATH=data/retail.db    # relative to repo root
 ```
+
+`OPENAI_MODEL` is still supported as a legacy fallback, but Chat Mode and
+Thinking Mode now use separate model settings by default.
 
 **Env var precedence** (highest → lowest):
 

@@ -78,6 +78,7 @@ def generate_report(
     steps_info: list[dict[str, Any]],
     client: Any,
     model: str = "gpt-4o-mini",
+    reasoning_effort: str | None = None,
 ) -> AnalysisReport:
     """
     Call the LLM to assemble step results into a structured report.
@@ -102,15 +103,18 @@ def generate_report(
 
     user_content = "\n\n".join(step_summaries)
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    request_kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": _REPORTER_SYSTEM},
             {"role": "user", "content": user_content},
         ],
-        temperature=0.3,
-        max_tokens=4096,
-    )
+        "max_completion_tokens": 4096,
+    }
+    if reasoning_effort:
+        request_kwargs["reasoning_effort"] = reasoning_effort
+
+    response = client.chat.completions.create(**request_kwargs)
 
     raw = (response.choices[0].message.content or "").strip()
     text = raw

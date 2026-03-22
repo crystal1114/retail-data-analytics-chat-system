@@ -43,7 +43,10 @@ class Settings(BaseSettings):
     # ── OpenAI ──────────────────────────────────────────────────────────────
     openai_api_key: str = ""
     openai_base_url: str = ""          # Optional: custom base URL (e.g. GenSpark proxy)
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = ""             # Legacy fallback for both modes
+    openai_chat_model: str = "gpt-5-mini"
+    openai_analysis_model: str = "gpt-5.4"
+    openai_analysis_reasoning_effort: str = "low"
 
     # ── Database ────────────────────────────────────────────────────────────
     database_path: str = "data/retail.db"
@@ -63,6 +66,18 @@ class Settings(BaseSettings):
     @property
     def openai_configured(self) -> bool:
         return bool(self.openai_api_key and self.openai_api_key != "sk-...")
+
+    @property
+    def resolved_chat_model(self) -> str:
+        return self.openai_chat_model or self.openai_model or "gpt-5-mini"
+
+    @property
+    def resolved_analysis_model(self) -> str:
+        return (
+            self.openai_analysis_model
+            or self.openai_model
+            or "gpt-5.4"
+        )
 
 
 # Singleton instance – import this everywhere

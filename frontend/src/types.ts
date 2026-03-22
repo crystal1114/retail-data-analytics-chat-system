@@ -114,13 +114,13 @@ export interface AnalysisStepInfo {
 
 export interface AnalysisSection {
   title: string;
-  content: string;
-  table?: { columns: string[]; rows: Array<Array<string | number>> };
+  content: unknown;
+  table?: { columns: unknown[]; rows: Array<Array<unknown>> };
   chart_data?: Record<string, unknown>;
 }
 
 export interface AnalysisReport {
-  executive_summary: string;
+  executive_summary: unknown;
   sections: AnalysisSection[];
 }
 

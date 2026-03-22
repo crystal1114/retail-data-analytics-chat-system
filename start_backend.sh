@@ -17,6 +17,7 @@ export PYTHONPATH="$SCRIPT_DIR"
 
 echo "[start_backend.sh] Starting on port 8000..."
 echo "[start_backend.sh] OPENAI_BASE_URL=${OPENAI_BASE_URL}"
-echo "[start_backend.sh] MODEL=${OPENAI_MODEL}"
+echo "[start_backend.sh] CHAT_MODEL=${OPENAI_CHAT_MODEL:-${OPENAI_MODEL}}"
+echo "[start_backend.sh] ANALYSIS_MODEL=${OPENAI_ANALYSIS_MODEL:-${OPENAI_MODEL}}"
 
 exec uvicorn backend.app.main:app --host 0.0.0.0 --port 8000

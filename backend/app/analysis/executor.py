@@ -63,6 +63,7 @@ def execute_step(
     client: Any,
     model: str,
     completed_results: dict[str, dict[str, Any]],
+    reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     """
     Generate code for *step* and execute it.
@@ -70,9 +71,9 @@ def execute_step(
     Returns a result dict with at least {"ok": bool, ...}.
     """
     if step.type == "sql":
-        return _execute_sql_step(step, conn, client, model)
+        return _execute_sql_step(step, conn, client, model, reasoning_effort)
     elif step.type == "python":
-        return _execute_python_step(step, client, model, completed_results)
+        return _execute_python_step(step, client, model, completed_results, reasoning_effort)
     else:
         return {"ok": False, "error": f"Unknown step type: {step.type}"}
 
@@ -82,18 +83,22 @@ def _execute_sql_step(
     conn: sqlite3.Connection,
     client: Any,
     model: str,
+    reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     """Generate a SQL query for the step, then run it."""
     system = _SQL_CODEGEN_SYSTEM.format(schema=SCHEMA)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    request_kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": step.description},
         ],
-        temperature=0.0,
-        max_tokens=1024,
-    )
+        "max_completion_tokens": 1024,
+    }
+    if reasoning_effort:
+        request_kwargs["reasoning_effort"] = reasoning_effort
+
+    response = client.chat.completions.create(**request_kwargs)
 
     sql = (response.choices[0].message.content or "").strip()
     if sql.startswith("```"):
@@ -114,6 +119,7 @@ def _execute_python_step(
     client: Any,
     model: str,
     completed_results: dict[str, dict[str, Any]],
+    reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     """Generate Python code, then execute it in the sandbox."""
     dep_data: dict[str, dict[str, Any]] = {}
@@ -132,15 +138,18 @@ def _execute_python_step(
     available_vars = "\n".join(var_descriptions) if var_descriptions else "(none)"
     system = _PYTHON_CODEGEN_SYSTEM.format(available_vars=available_vars)
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    request_kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": step.description},
         ],
-        temperature=0.0,
-        max_tokens=2048,
-    )
+        "max_completion_tokens": 2048,
+    }
+    if reasoning_effort:
+        request_kwargs["reasoning_effort"] = reasoning_effort
+
+    response = client.chat.completions.create(**request_kwargs)
 
     code = (response.choices[0].message.content or "").strip()
     if code.startswith("```"):

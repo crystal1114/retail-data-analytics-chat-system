@@ -51,18 +51,24 @@ def plan_steps(
     schema: str,
     client: Any,
     model: str = "gpt-4o-mini",
+    reasoning_effort: str | None = None,
 ) -> list[AnalysisStep]:
     """Call the LLM to decompose *prompt* into analysis steps."""
 
     system = _PLANNER_SYSTEM.format(schema=schema)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    request_kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.2,
-        max_tokens=2048,
+        "max_completion_tokens": 2048,
+    }
+    if reasoning_effort:
+        request_kwargs["reasoning_effort"] = reasoning_effort
+
+    response = client.chat.completions.create(
+        **request_kwargs,
     )
 
     raw = (response.choices[0].message.content or "").strip()

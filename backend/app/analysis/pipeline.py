@@ -65,7 +65,8 @@ def _run_pipeline_sync(
     Runs in a background thread; sends _SENTINEL when finished.
     Opens its own DB connection (the request-scoped one is closed by then).
     """
-    model = settings.openai_model or "gpt-4o-mini"
+    model = settings.resolved_analysis_model
+    reasoning_effort = settings.openai_analysis_reasoning_effort or None
     conn: sqlite3.Connection | None = None
 
     try:
@@ -76,7 +77,7 @@ def _run_pipeline_sync(
         q.put(_sse("status", {"phase": "planning"}))
 
         try:
-            steps = plan_steps(prompt, SCHEMA, client, model)
+            steps = plan_steps(prompt, SCHEMA, client, model, reasoning_effort)
         except Exception as exc:
             logger.error("Planner failed: %r\n%s", exc, traceback.format_exc())
             q.put(_sse("error", {"message": f"Planning failed: {exc!r}"}))
@@ -115,7 +116,7 @@ def _run_pipeline_sync(
 
             step.status = "running"
             try:
-                result = execute_step(step, conn, client, model, completed)
+                result = execute_step(step, conn, client, model, completed, reasoning_effort)
             except Exception as exc:
                 logger.error("Step %s failed: %s", step.step_id, exc)
                 result = {"ok": False, "error": str(exc)}
@@ -155,7 +156,7 @@ def _run_pipeline_sync(
         ]
 
         try:
-            report = generate_report(steps_info, client, model)
+            report = generate_report(steps_info, client, model, reasoning_effort)
         except Exception as exc:
             logger.error("Reporter failed: %r\n%s", exc, traceback.format_exc())
             q.put(_sse("error", {

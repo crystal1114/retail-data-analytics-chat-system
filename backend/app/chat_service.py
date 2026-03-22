@@ -324,7 +324,7 @@ def run_chat(
         rounds += 1
         try:
             response = client.chat.completions.create(
-                model=settings.openai_model,
+                model=settings.resolved_chat_model,
                 messages=full_messages,
                 tools=TOOL_DEFINITIONS,
                 tool_choice="auto",
@@ -355,7 +355,7 @@ def run_chat(
                 "structured": structured,
                 "tool_results": tool_results_log,
                 "metadata": {
-                    "model": settings.openai_model,
+                    "model": settings.resolved_chat_model,
                     "tool_rounds": rounds,
                     "finish_reason": finish_reason,
                     "pipeline": "nl_to_sql",
@@ -385,7 +385,7 @@ def run_chat(
                     "args": {"sql": sql_preview, "description": description},
                     "result": tool_result,
                 })
-                return _make_timeout_response(tool_results_log, settings.openai_model, rounds)
+                return _make_timeout_response(tool_results_log, settings.resolved_chat_model, rounds)
 
             # ── Collect truncation metadata for pass-through ─────────────────
             if tool_result.get("ok"):
@@ -422,7 +422,7 @@ def run_chat(
         "structured": None,
         "tool_results": tool_results_log,
         "metadata": {
-            "model": settings.openai_model,
+            "model": settings.resolved_chat_model,
             "tool_rounds": rounds,
             "warning": "max_tool_rounds_exceeded",
             "pipeline": "nl_to_sql",
