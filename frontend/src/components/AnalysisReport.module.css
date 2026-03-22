@@ -1,0 +1,117 @@
+/* ══════════════════════════════════════════════════════════════════
+   AnalysisReport.module.css — Report rendering for Thinking Mode
+   ══════════════════════════════════════════════════════════════════ */
+
+.report {
+  max-width: 780px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Executive summary ──────────────────────────────────────────── */
+.summary {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(92,74,224,0.10) 0%, rgba(124,108,250,0.03) 100%);
+  border: 1px solid rgba(124,108,250,0.20);
+  border-radius: 14px;
+  color: var(--color-text-1);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.summaryLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--color-accent-hi);
+  margin-bottom: 10px;
+}
+
+/* ── Section cards ──────────────────────────────────────────────── */
+.section {
+  padding: 20px 24px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border-md);
+  border-radius: 12px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-1);
+  margin-bottom: 10px;
+  letter-spacing: -0.2px;
+}
+
+.sectionContent {
+  font-size: 13px;
+  color: var(--color-text-2);
+  line-height: 1.75;
+  margin-bottom: 12px;
+}
+
+/* ── Tables inside sections ─────────────────────────────────────── */
+.tableWrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  padding: 8px 12px;
+  text-align: left;
+  background: rgba(255,255,255,0.03);
+  color: var(--color-text-2);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border-md);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 7px 12px;
+  color: var(--color-text-1);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover td {
+  background: rgba(255,255,255,0.015);
+}
+
+/* ── New analysis button ────────────────────────────────────────── */
+.newBtn {
+  align-self: center;
+  margin-top: 8px;
+  padding: 10px 24px;
+  background: transparent;
+  border: 1px solid var(--color-border-md);
+  border-radius: 10px;
+  color: var(--color-text-2);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.newBtn:hover {
+  border-color: rgba(124,108,250,0.35);
+  color: var(--color-accent-hi);
+  background: rgba(124,108,250,0.04);
+}

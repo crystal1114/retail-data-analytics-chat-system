@@ -1,11 +1,13 @@
 # Retail Data Analytics Chat System
 
-A production-quality, AI-powered retail analytics assistant that lets you ask
-natural-language questions about a retail transaction dataset through a chat
-interface. The LLM **translates questions into SQL**, the backend **executes
-that SQL** against the SQLite retail dataset, and the model returns **grounded
-natural-language answers** (and structured visualization hints) built only
-from the query results.
+A production-quality, AI-powered retail analytics assistant with two modes:
+
+- **Chat Mode** — ask natural-language questions; the LLM translates them into
+SQL, executes against the SQLite retail dataset, and returns grounded answers
+with chart/table visualizations.
+- **Thinking Mode** — request broad analyses (e.g. "全面分析一下数据然后生成报表");
+the system plans multiple steps, executes SQL and pandas code, and streams a
+structured report with executive summary, findings, and tables via SSE.
 
 ---
 
@@ -20,7 +22,7 @@ from the query results.
 7. [Running the Frontend](#running-the-frontend)
 8. [Running Tests](#running-tests)
 9. [API Reference](#api-reference)
-10. [Example Chat Prompts](#example-chat-prompts)
+10. [Example Prompts](#example-prompts)
 11. [Known Limitations](#known-limitations)
 12. [Future Improvements](#future-improvements)
 
@@ -28,20 +30,25 @@ from the query results.
 
 ## Project Overview
 
-| Item | Detail |
-|---|---|
-| **Name** | Retail Data Analytics Chat System |
-| **Dataset** | Kaggle Retail Transaction Dataset (~200 k rows) |
-| **Backend** | FastAPI + Python, SQLite, OpenAI (NL → SQL via `execute_sql` tool) |
-| **Frontend** | React + Vite + TypeScript |
-| **LLM** | OpenAI GPT-4o-mini (configurable) |
-| **Data Store** | SQLite (`data/retail.db`) |
 
-The system answers three categories of questions:
+| Item           | Detail                                                             |
+| -------------- | ------------------------------------------------------------------ |
+| **Name**       | Retail Data Analytics Chat System                                  |
+| **Dataset**    | Kaggle Retail Transaction Dataset (~200 k rows)                    |
+| **Backend**    | FastAPI + Python, SQLite, OpenAI (NL → SQL via `execute_sql` tool) |
+| **Frontend**   | React + Vite + TypeScript                                          |
+| **LLM**        | OpenAI GPT-4o-mini (configurable)                                  |
+| **Data Store** | SQLite (`data/retail.db`)                                          |
 
-* **Customer queries** – purchase history, total spend, favourite products
-* **Product queries** – revenue, units sold, average discount, stores
-* **Business metrics** – KPIs, monthly revenue trends, category breakdown, store rankings
+
+**Chat Mode** answers three categories of questions:
+
+- **Customer queries** – purchase history, total spend, favourite products
+- **Product queries** – revenue, units sold, average discount, stores
+- **Business metrics** – KPIs, monthly revenue trends, category breakdown, store rankings
+
+**Thinking Mode** handles broad analysis requests by orchestrating a multi-step
+pipeline (planner → executor → reporter) streamed in real time via SSE.
 
 ---
 
@@ -49,31 +56,43 @@ The system answers three categories of questions:
 
 ### Welcome screen — suggested prompts to get started
 
-![Welcome screen](docs/screenshots/welcome.jpg)
+Welcome screen
 
 ### Monthly revenue trend — line chart visualization
 
-![Monthly revenue line chart](docs/screenshots/chart-line.jpg)
+Monthly revenue line chart
 
 ### Payment method breakdown — pie chart with follow-up question
 
-![Payment breakdown pie chart](docs/screenshots/chart-pie.jpg)
+Payment breakdown pie chart
 
 ### Customer purchase history — table with transaction details
 
-![Customer purchase history table](docs/screenshots/table-history.jpg)
+Customer purchase history table
 
 ### Multi-turn conversation — follow-up resolves "they" to the previous customer, with KPI card
 
-![Follow-up conversation with KPI card](docs/screenshots/followup-kpi.jpg)
+Follow-up conversation with KPI card
 
 ### KPI insights — overall business metrics with expandable SQL
 
-![KPI insights](docs/screenshots/kpi-insights.jpg)
+KPI insights
 
 ### Safety rails — broad-query interception with guided sample and suggestions
 
-![Safety rails](docs/screenshots/safety-rails.jpg)
+Safety rails
+
+### Thinking Mode — analysis prompt input
+
+Thinking Mode input
+
+### Thinking Mode — real-time step execution progress
+
+Thinking Mode progress
+
+### Thinking Mode — structured report with executive summary and tables
+
+Thinking Mode report
 
 ---
 
@@ -86,7 +105,7 @@ simplicity — one file, fast indexed reads, no server to manage.
 
 Full details — architecture diagram, module map, NL → SQL rationale, safety
 rails, data model, intent classification, edge-case table, tradeoffs, and the
-evaluation framework — are in [`docs/review_notes.md`](docs/review_notes.md).
+evaluation framework — are in `[docs/review_notes.md](docs/review_notes.md)`.
 
 ---
 
@@ -95,12 +114,14 @@ evaluation framework — are in [`docs/review_notes.md`](docs/review_notes.md).
 > **Important**: The dataset uses synthetic IDs that differ from examples in
 > typical homework descriptions.
 
-| Field | Real Format | Example |
-|---|---|---|
-| `CustomerID` | Numeric string | `109318`, `579675`, `993229` |
-| `ProductID` | Single letter | `A`, `B`, `C`, `D` |
-| `ProductCategory` | Text | `Books`, `Clothing`, `Electronics`, `Home Decor` |
-| `PaymentMethod` | Text | `Cash`, `Credit Card`, `Debit Card`, `PayPal` |
+
+| Field             | Real Format    | Example                                          |
+| ----------------- | -------------- | ------------------------------------------------ |
+| `CustomerID`      | Numeric string | `109318`, `579675`, `993229`                     |
+| `ProductID`       | Single letter  | `A`, `B`, `C`, `D`                               |
+| `ProductCategory` | Text           | `Books`, `Clothing`, `Electronics`, `Home Decor` |
+| `PaymentMethod`   | Text           | `Cash`, `Credit Card`, `Debit Card`, `PayPal`    |
+
 
 All example prompts below use real ID formats from the dataset.
 
@@ -110,9 +131,9 @@ All example prompts below use real ID formats from the dataset.
 
 ### Prerequisites
 
-* Python 3.11+
-* Node.js 18+
-* OpenAI API key
+- Python 3.11+
+- Node.js 18+
+- OpenAI API key
 
 ### 1. Clone / download the repository
 
@@ -128,6 +149,7 @@ pip install -r backend/requirements.txt
 ```
 
 For tests, also install:
+
 ```bash
 pip install -r backend/requirements-dev.txt
 ```
@@ -157,6 +179,7 @@ DATABASE_PATH=data/retail.db    # relative to repo root
 ```
 
 **Env var precedence** (highest → lowest):
+
 1. Shell environment (`export OPENAI_API_KEY=...`)
 2. `.env` in the **repo root** (recommended; same file `start_backend.sh` sources)
 3. Optional `backend/.env` — if present, overrides the same keys from repo-root `.env`
@@ -165,15 +188,19 @@ DATABASE_PATH=data/retail.db    # relative to repo root
 ### 5. Download the dataset
 
 Option A – from Kaggle:
+
 ```
 https://www.kaggle.com/datasets/fahadrehman07/retail-transaction-dataset/data
 ```
+
 Download `Retail_Transaction_Dataset.csv` and place it at:
+
 ```
 data/Retail_Transaction_Dataset.csv
 ```
 
 Option B – if you already have the file, copy it:
+
 ```bash
 cp /path/to/Retail_Transaction_Dataset.csv data/
 ```
@@ -190,6 +217,7 @@ python scripts/ingest.py --reset
 ```
 
 Expected output:
+
 ```
 [INFO] Opening database: data/retail.db
 [INFO] Loading CSV: data/Retail_Transaction_Dataset.csv
@@ -273,6 +301,7 @@ See `docs/review_notes.md` for detailed evaluation methodology and results.
 ## API Reference
 
 ### `GET /api/health`
+
 Returns backend status.
 
 ```json
@@ -289,6 +318,7 @@ Primary analytics surface. The LLM generates SQL, the backend runs it on the
 retail database, and the response is grounded in those results.
 
 Request:
+
 ```json
 {
   "messages": [
@@ -298,6 +328,7 @@ Request:
 ```
 
 Response (fields may vary; `structured` holds optional chart/KPI payloads for the UI):
+
 ```json
 {
   "reply": "Customer 109318 has made ...",
@@ -313,11 +344,39 @@ Response (fields may vary; `structured` holds optional chart/KPI payloads for th
 }
 ```
 
+### `POST /api/analysis`
+
+Thinking Mode endpoint. Streams SSE events as the pipeline plans, executes, and
+assembles a structured report. The response is `text/event-stream`.
+
+Request:
+
+```json
+{
+  "prompt": "Analyze revenue by product category and show monthly trends"
+}
+```
+
+SSE event sequence:
+
+```
+event: status        → {"phase": "planning"}
+event: plan          → {"steps": [{"step_id": "s1", "title": "...", "type": "sql"}, ...]}
+event: status        → {"phase": "executing"}
+event: step_start    → {"step_id": "s1", "title": "...", "current": 1, "total": 4}
+event: step_done     → {"step_id": "s1", "status": "ok", "summary": "4 row(s), 2 column(s)"}
+...
+event: status        → {"phase": "reporting"}
+event: report        → {"executive_summary": "...", "sections": [...]}
+event: done          → {}
+```
+
 ---
 
-## Example Chat Prompts
+## Example Prompts
 
 ### Customer queries
+
 ```
 What has customer 109318 purchased?
 How much has customer 579675 spent in total?
@@ -327,6 +386,7 @@ Compare customer 109318 and customer 579675
 ```
 
 ### Product queries
+
 ```
 Show me details for product A
 What is the average discount for product C?
@@ -336,6 +396,7 @@ What is the total revenue for product A?
 ```
 
 ### Business analytics
+
 ```
 What is the total revenue?
 Which product categories generate the most revenue?
@@ -348,6 +409,7 @@ Who are the top 5 customers by spend?
 ```
 
 ### Follow-up / context queries
+
 ```
 User: Tell me about customer 109318
 User: How much did they spend total?
@@ -357,28 +419,42 @@ User: Show me details for product A
 User: Which stores carry it?
 ```
 
+### Thinking Mode prompts
+
+```
+Analyze revenue by product category, find the top 5 customers by spending, and show monthly revenue trends
+全面分析一下数据然后生成报表
+Compare product performance across all categories and identify seasonal patterns
+Give me a complete business health report with customer retention insights
+```
+
 ---
 
 ## Known Limitations
 
 1. **No persistent sessions** – conversation context lives only in the browser.
-   Refreshing the page starts a fresh session.
+  Refreshing the page starts a fresh session.
 2. **Store location is a full address** – the dataset uses full street addresses as
-   the store identifier, not a store code. Queries like "revenue by store" return
+  the store identifier, not a store code. Queries like "revenue by store" return
    full address strings.
 3. **ProductID is a single letter (A–D)** – this is how the dataset is structured.
-   There are only four distinct products.
-4. **No streaming** – the chat response waits for the full LLM completion before
-   rendering. Multiple SQL round-trips may feel slow on complex questions.
+  There are only four distinct products.
+4. **Chat mode is not streamed** – Chat Mode waits for the full LLM completion
+  before rendering. Thinking Mode streams progress via SSE.
 5. **OpenAI-only** – the LLM layer is coupled to the OpenAI client. Swapping to
-   Anthropic or a local model would require changes in `chat_service.py`.
+  Anthropic or a local model would require changes in `chat_service.py` and
+   the analysis pipeline.
 6. **No authentication** – the API has no authentication layer; do not expose it
-   publicly without adding one.
+  publicly without adding one.
+7. **Thinking Mode concurrency** – limited to 3 concurrent analysis streams to
+  protect backend resources.
 
 ---
 
 ## Future Improvements
 
-- [ ] **Streaming + progressive UI** – use `stream=True` with SSE so the user sees tokens as they arrive. For multi-round SQL queries, stream an intermediate "Querying…" status after each tool call so the UI never appears frozen. This removes the perception gap between a 2-second single-query answer and a 10-second multi-step analysis
-- [ ] **Caching** – add a simple TTL cache for expensive aggregate queries
-- [ ] **Multi-LLM support with intent-based routing** – abstract the LLM client to support Anthropic, Ollama, etc. Route queries by complexity: simple lookups and single-metric questions use a cheap, fast model (e.g. GPT-4o-mini, Haiku); complex multi-step analyses, comparisons, and trend interpretations use a larger model (e.g. GPT-4o, Sonnet)
+- **Caching** – add a simple TTL cache for expensive aggregate queries
+- **Chart rendering in Thinking Mode** – the report schema supports
+`chart_data` per section; wire it to the frontend chart components
+- **Multi-LLM support with intent-based routing** – abstract the LLM client to support Anthropic, Ollama, etc. Route queries by complexity: simple lookups and single-metric questions use a cheap, fast model (e.g. GPT-4o-mini, Haiku); complex multi-step analyses, comparisons, and trend interpretations use a larger model (e.g. GPT-4o, Sonnet)
+

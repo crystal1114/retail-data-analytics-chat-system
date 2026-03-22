@@ -93,3 +93,42 @@ export interface HealthResponse {
   database: string;
   openai_configured: boolean;
 }
+
+// ── Analysis / Thinking Mode ────────────────────────────────────────────────
+
+export type AnalysisPhase =
+  | 'idle'
+  | 'planning'
+  | 'executing'
+  | 'reporting'
+  | 'done'
+  | 'error';
+
+export interface AnalysisStepInfo {
+  step_id: string;
+  title: string;
+  type: 'sql' | 'python';
+  status: 'pending' | 'running' | 'done' | 'failed';
+  summary?: string;
+}
+
+export interface AnalysisSection {
+  title: string;
+  content: string;
+  table?: { columns: string[]; rows: Array<Array<string | number>> };
+  chart_data?: Record<string, unknown>;
+}
+
+export interface AnalysisReport {
+  executive_summary: string;
+  sections: AnalysisSection[];
+}
+
+export type AnalysisSSEEvent =
+  | { type: 'status'; phase: AnalysisPhase }
+  | { type: 'plan'; steps: Array<{ step_id: string; title: string; type: string }> }
+  | { type: 'step_start'; step_id: string; title: string; current: number; total: number }
+  | { type: 'step_done'; step_id: string; status: 'ok' | 'failed'; summary?: string }
+  | { type: 'report'; executive_summary: string; sections: AnalysisSection[] }
+  | { type: 'done' }
+  | { type: 'error'; message: string; partial_steps?: unknown[] };

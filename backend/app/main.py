@@ -4,9 +4,10 @@ backend/app/main.py
 FastAPI application — route wiring and dependency setup.
 
 Data layer: LLM-generated SQL (NL → SQL → Answer pipeline).
-  - /api/chat   : conversational endpoint; LLM writes SELECT queries
-  - /api/health : readiness check
-  - /docs       : auto-generated Swagger UI
+  - /api/chat     : conversational endpoint; LLM writes SELECT queries
+  - /api/analysis : Thinking Mode — SSE-streamed multi-step analysis
+  - /api/health   : readiness check
+  - /docs         : auto-generated Swagger UI
 
 The old pre-canned repository endpoints (/api/customers, /api/products,
 /api/metrics) have been removed.  All analytics are now served through
@@ -19,7 +20,10 @@ import sqlite3
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
+from .analysis.pipeline import run_analysis
+from .analysis.schemas import AnalysisRequest
 from .chat_service import run_chat
 from .config import settings
 from .db import get_db
@@ -82,6 +86,26 @@ def chat(
         structured=result.get("structured"),
         tool_results=result.get("tool_results", []),
         metadata=result.get("metadata", {}),
+    )
+
+
+# ── Analysis (Thinking Mode) ──────────────────────────────────────────────────
+
+@app.post("/api/analysis", tags=["Analysis"])
+async def analysis(
+    request: AnalysisRequest,
+) -> StreamingResponse:
+    """
+    Thinking Mode: stream a multi-step analysis via Server-Sent Events.
+
+    The pipeline plans analysis steps, executes each (SQL + optional pandas),
+    and assembles a structured report — all streamed as SSE events.
+    The pipeline opens its own DB connection (separate from the request lifecycle).
+    """
+    return StreamingResponse(
+        run_analysis(request.prompt),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

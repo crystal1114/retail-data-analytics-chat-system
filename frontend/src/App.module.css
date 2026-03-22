@@ -234,6 +234,32 @@
   margin-top: 1px;
 }
 
+.modeToggle {
+  padding: 6px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 8px;
+  color: var(--color-text-2);
+  font-size: 11.5px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s, box-shadow 0.18s;
+  white-space: nowrap;
+}
+
+.modeToggle:hover:not(:disabled) {
+  background: rgba(124,108,250,0.08);
+  border-color: rgba(124,108,250,0.30);
+  color: var(--color-accent-hi);
+  box-shadow: 0 0 0 1px rgba(124,108,250,0.10);
+}
+
+.modeToggle:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* ── Messages feed ───────────────────────────────────────────────── */
 .messages {
   flex: 1;

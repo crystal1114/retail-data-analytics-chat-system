@@ -1,6 +1,7 @@
 // src/App.tsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { checkHealth, sendChat } from './api';
+import AnalysisView from './components/AnalysisView';
 import ChatBubble from './components/ChatBubble';
 import TypingIndicator from './components/TypingIndicator';
 import type { ChatMessage, HealthResponse, ToolResult, StructuredResponse, ResultMeta } from './types';
@@ -45,6 +46,7 @@ interface DisplayMessage {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [mode, setMode]                       = useState<'chat' | 'thinking'>('chat');
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
   const [history, setHistory]                 = useState<ChatMessage[]>([]);
   const [input, setInput]                     = useState('');
@@ -205,8 +207,23 @@ export default function App() {
               Trends · Comparisons · Rankings · Customer &amp; Product lookups
             </div>
           </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <button
+              className={styles.modeToggle}
+              onClick={() => setMode(mode === 'chat' ? 'thinking' : 'chat')}
+              disabled={loading}
+              title={mode === 'chat' ? 'Switch to Thinking Mode' : 'Switch to Chat Mode'}
+            >
+              {mode === 'chat' ? '🧠 Thinking Mode' : '💬 Chat Mode'}
+            </button>
+          </div>
         </div>
 
+        {/* ── Thinking Mode ──────────────────────────────────────────── */}
+        {mode === 'thinking' ? (
+          <AnalysisView />
+        ) : (
+        <>
         {/* Messages / Welcome */}
         {displayMessages.length === 0 ? (
           <div className={styles.welcome}>
@@ -254,6 +271,7 @@ export default function App() {
 
         {/* Composer */}
         <div className={styles.inputArea}>
+
           <div className={styles.inputWrapper}>
             <textarea
               ref={textareaRef}
@@ -282,6 +300,8 @@ export default function App() {
             <strong>Enter</strong> to send · <strong>Shift + Enter</strong> for new line
           </p>
         </div>
+        </>
+        )}
       </main>
     </div>
   );
