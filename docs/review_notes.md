@@ -7,27 +7,25 @@
 ## Architecture Summary
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  React Frontend (Vite)  →  POST /api/chat  →  FastAPI       │
-│                                                              │
-│  FastAPI  ──►  chat_service.run_chat()                       │
-│                    │                                         │
-│                    ▼                                         │
-│          OpenAI Chat API — model drafts SQLite SELECT        │
-│                    │                                         │
-│          ◄── execute_sql(query) ───────────────────┐         │
-│                    │                              │         │
-│                    ▼                              │         │
-│          sql_tool.dispatch / run_sql()            │         │
-│          (SELECT-only guard, LIMIT, timeout)      │         │
-│                    │                              │         │
-│                    ▼                              │         │
-│          SQLite (`data/retail.db`)                │         │
-│                    │                              │         │
-│          rows + metadata ─────────────────────────┘         │
-│                    │                                         │
-│          final answer ◄── OpenAI (grounded in results)      │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  React Frontend (Vite)                                              │
+│    ├── Chat Mode  → POST /api/chat      → FastAPI (sync JSON)      │
+│    └── Thinking   → POST /api/analysis  → FastAPI (SSE stream)     │
+│                                                                     │
+│  ── Chat Mode (gpt-5-mini) ──────────────────────────────────────  │
+│  chat_service.run_chat()                                            │
+│      │  OpenAI Chat API — model drafts SQLite SELECT                │
+│      │  ◄── execute_sql(query) ──┐                                  │
+│      │  sql_tool.run_sql()       │                                  │
+│      │  SQLite → rows + metadata ┘                                  │
+│      └► final grounded answer                                       │
+│                                                                     │
+│  ── Thinking Mode (gpt-5.4, reasoning_effort=low) ───────────────  │
+│  analysis/pipeline.run_analysis()  ── SSE stream ──►  frontend      │
+│      ├─ planner.plan_steps()         → 3-8 analysis steps           │
+│      ├─ executor.execute_step()  ×N  → SQL or Python (sandbox)      │
+│      └─ reporter.generate_report()   → structured report            │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key modules
@@ -35,16 +33,26 @@
 | File | Responsibility |
 |---|---|
 | `scripts/ingest.py` | One-shot CSV → SQLite loader |
-| `backend/app/config.py` | `pydantic-settings` config singleton |
+| `backend/app/config.py` | `pydantic-settings` config singleton; separate model settings for Chat and Thinking Mode |
 | `backend/app/db.py` | SQLite connection factory & FastAPI dependency |
 | `backend/app/sql_tool.py` | Schema text for the LLM; `execute_sql` tool; validation, limits, timeouts |
-| `backend/app/chat_service.py` | NL → SQL orchestration loop; broad-query shortcut; final grounded reply |
-| `backend/app/main.py` | FastAPI app (`/api/health`, `/api/chat`), CORS |
-| `frontend/src/App.tsx` | React chat UI |
+| `backend/app/chat_service.py` | Chat Mode: NL → SQL orchestration loop; broad-query shortcut; final grounded reply |
+| `backend/app/analysis/pipeline.py` | Thinking Mode: async SSE generator orchestrating planner → executor → reporter |
+| `backend/app/analysis/planner.py` | Decomposes broad requests into 3–8 concrete SQL/Python steps via LLM |
+| `backend/app/analysis/executor.py` | Generates and runs SQL or Python code for each step |
+| `backend/app/analysis/sandbox.py` | Restricted Python sandbox for LLM-generated pandas code |
+| `backend/app/analysis/reporter.py` | Assembles step results into a structured report via LLM |
+| `backend/app/analysis/schemas.py` | Pydantic models for analysis pipeline data structures |
+| `backend/app/main.py` | FastAPI app (`/api/health`, `/api/chat`, `/api/analysis`), CORS |
+| `frontend/src/App.tsx` | React UI with Chat/Thinking Mode toggle |
+| `frontend/src/components/AnalysisView.tsx` | Thinking Mode UI: input, real-time progress, report display |
+| `frontend/src/components/AnalysisReport.tsx` | Renders structured analysis report with tables |
 
 ---
 
 ## How the LLM Is Integrated with the Data Layer
+
+### Chat Mode (gpt-5-mini)
 
 The system uses a **NL → SQL → Answer** pipeline:
 
@@ -60,6 +68,27 @@ The system uses a **NL → SQL → Answer** pipeline:
    visualisation hint) grounded only in the query results.
 
 This loop repeats (up to `max_tool_rounds=6`) until `finish_reason == "stop"`.
+
+### Thinking Mode (gpt-5.4, reasoning_effort=low)
+
+For broad analysis requests, a separate **planner → executor → reporter** pipeline
+streams real-time progress via SSE:
+
+1. **Planner** — the LLM decomposes the user's request into 3–8 concrete steps
+   (each either a SQL query or a Python/pandas analysis), with explicit
+   dependencies between steps.
+2. **Executor** — for each step, the LLM generates code (SQL or Python), which is
+   executed against the database or in a restricted sandbox. SQL steps reuse the
+   existing `sql_tool.run_sql()` safety rails. Python steps run in a sandbox with
+   only `pandas`, `json`, and `math` available, enforced timeouts, and capped
+   DataFrame sizes.
+3. **Reporter** — completed step results are passed to the LLM, which assembles a
+   structured report with an executive summary, narrative sections, and tables.
+
+The pipeline runs in a background thread, pushing SSE events into a thread-safe
+queue. The async generator pulls from the queue and yields events to the frontend
+as they arrive. Concurrency is limited to 3 simultaneous streams via a semaphore,
+with a 3-minute overall pipeline timeout.
 
 ---
 
@@ -101,6 +130,15 @@ All enforced in `sql_tool.py`:
 * **Broad-query interception** — "show all data" style requests are caught before
   the LLM is called and return a summary + sample instead.
 
+Thinking Mode adds additional safeguards:
+
+* **Python sandbox** — LLM-generated code runs with restricted builtins
+  (`pandas`, `json`, `math` only), no `os`/`subprocess`/`sys`, 30-second timeout.
+* **DataFrame row cap** — input DataFrames are capped at 5,000 rows in the sandbox.
+* **Table row cap** — step results are capped at 200 rows before being stored.
+* **Concurrency limit** — at most 3 concurrent analysis streams (semaphore).
+* **Pipeline timeout** — entire pipeline aborts after 3 minutes.
+
 ---
 
 ## Technical Decisions
@@ -114,6 +152,8 @@ strings that pass validation are executed.
 
 ### LLM integration approach
 
+**Chat Mode** uses the OpenAI tool-calling loop:
+
 1. The system prompt embeds the database schema and strict SQL rules (e.g. date
    handling for this dataset).
 2. A single OpenAI function tool, `execute_sql`, carries the generated `SELECT`.
@@ -122,6 +162,12 @@ strings that pass validation are executed.
    (and optional structured chart payload).
 4. Broad "dump the whole table" style questions can be short-circuited before
    SQL generation when they match heuristics in `chat_service` / `sql_tool`.
+
+**Thinking Mode** uses a three-phase pipeline with dedicated LLM calls for each
+phase (planning, code generation, report assembly). GPT-5.4 is used with
+`reasoning_effort=low` — enough reasoning to improve reliability without excessive
+latency. The pipeline adapts to GPT-5.4's API requirements
+(`max_completion_tokens`, no custom `temperature`).
 
 ### Intent and flexibility
 
@@ -197,6 +243,11 @@ These cover the four most common filter patterns.
 | Duplicate ingestion | `scripts/ingest.py` | Table check before load; `--reset` flag |
 | LLM produces no content | `chat_service.run_chat` | Returns `""` or last assistant content |
 | Too many tool rounds | `chat_service.run_chat` | Capped at `max_tool_rounds`; returns partial answer |
+| Thinking Mode step failure | `analysis/pipeline.py` | Failed steps are marked; dependent steps skipped; report generated from successful steps |
+| Thinking Mode pipeline timeout | `analysis/pipeline.py` | SSE error event sent after 3 minutes |
+| Thinking Mode concurrent overload | `analysis/pipeline.py` | Semaphore rejects with "Too many concurrent analyses" |
+| LLM generates unsafe Python | `analysis/sandbox.py` | Restricted builtins, blocked imports, 30-second thread timeout |
+| Nested objects in report payload | `AnalysisReport.tsx` | `formatValue()` safely stringifies any non-primitive before rendering |
 
 ---
 
@@ -210,19 +261,20 @@ These cover the four most common filter patterns.
 | Implicit intent classification | Less control; model behaviour depends on prompt quality |
 | Denormalised schema | Fast reads, but updates (if any) would require care |
 | TEXT date storage | Simple ingestion, but date range queries need explicit conversion |
-| No streaming | Simpler code, but UX feels slower for long responses |
+| Chat Mode not streamed | Simpler code, but UX feels slower for long responses |
+| Thinking Mode uses `exec()` sandbox | Flexible Python analysis, but sandbox is not a full security boundary |
+| Two separate models | gpt-5-mini for fast chat, gpt-5.4 for deeper analysis — good cost/quality split, but Thinking Mode is slower |
 | SQLite | No concurrent writes; not suitable for multi-user production |
 
 ### Recommended Next Steps
 
-1. **Streaming + progressive UI** — use `stream=True` with SSE so tokens render
-   as they arrive. For multi-round SQL queries, stream an intermediate
-   "Querying…" status after each tool call so the UI never appears frozen.
+1. **Chat Mode streaming** — use `stream=True` with SSE so tokens render as they
+   arrive. Thinking Mode already streams via SSE.
 2. **Caching** — add a simple TTL cache for expensive aggregate queries.
-3. **Multi-LLM support with intent-based routing** — abstract the LLM client to
-   support multiple providers (Anthropic, Ollama, etc.) and route by query
-   complexity: simple lookups use a cheap, fast model (e.g. GPT-4o-mini, Haiku);
-   complex multi-step analyses use a larger model (e.g. GPT-4o, Sonnet).
+3. **Chart rendering in Thinking Mode** — the report schema supports `chart_data`
+   per section; wire it to the frontend chart components.
+4. **Multi-LLM support** — abstract the LLM client to support multiple providers
+   (Anthropic, Ollama, etc.).
 
 ---
 
@@ -300,7 +352,7 @@ EVAL_JUDGE=1 pytest -m eval -v
 
 ```
 Eval Results: 37/37 passed (100%)
-Judge overall: 4.68 / 5.0 (avg across 37 scored cases)
+Judge overall: 4.94 / 5.0 (avg across 37 scored cases)
 ```
 
 ### Lessons from early eval runs
