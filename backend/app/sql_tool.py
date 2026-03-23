@@ -35,7 +35,7 @@ QUERY_TIMEOUT_S = 3.0
 # ── Safety ────────────────────────────────────────────────────────────────────
 
 _WRITE_KEYWORDS = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|REPLACE|TRUNCATE|ATTACH|DETACH"
+    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|REPLACE\s+INTO|TRUNCATE|ATTACH|DETACH"
     r"|PRAGMA\s+\w+\s*=|VACUUM|REINDEX|ANALYZE)\b",
     re.IGNORECASE,
 )
@@ -74,8 +74,9 @@ def _validate_sql(sql: str) -> str | None:
     no_comments = re.sub(r"--[^\n]*", "", stripped)
     no_comments = re.sub(r"/\*.*?\*/", "", no_comments, flags=re.DOTALL).strip()
 
-    if not no_comments.upper().startswith("SELECT"):
-        return "Only SELECT statements are permitted."
+    first_keyword = no_comments.upper().split()[0] if no_comments.split() else ""
+    if first_keyword not in ("SELECT", "WITH"):
+        return "Only SELECT statements (including CTEs) are permitted."
     if _WRITE_KEYWORDS.search(no_comments):
         return "Query contains a forbidden keyword (write/DDL operation)."
     inner = no_comments.rstrip(";")

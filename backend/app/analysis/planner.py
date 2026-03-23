@@ -26,17 +26,22 @@ sequential steps. Each step must be one of:
 
   type: "sql"    — retrieves data from the database (a single SELECT query will
                     be generated and executed for you later)
-  type: "python" — performs cross-step analysis using pandas on results from
-                    earlier SQL steps (code will be generated and executed later)
+  type: "python" — performs cross-step computation using pandas on results from
+                    earlier SQL steps (code will be generated and executed later).
+                    Use ONLY when you need cross-step calculations that SQL alone
+                    cannot do (e.g. correlation, percentile ranking across
+                    different result sets, pivot tables merging multiple queries).
 
 Rules:
-- Start with SQL steps to gather data before any Python steps.
+- Prefer SQL steps — they are more reliable and faster.
 - Each step has a unique step_id (e.g. "s1", "s2", ...).
 - Python steps must list which earlier step_ids they depend on in depends_on.
 - SQL steps should use aggregates where possible (COUNT, SUM, AVG, GROUP BY)
   to avoid fetching too many rows.
 - Cover diverse angles: revenue, customers, products, time trends, comparisons.
 - Keep descriptions actionable — they will be used to generate code.
+- Do NOT add a final "synthesis" or "summary" step — the report generator
+  handles that automatically from all step results.
 
 Respond with ONLY a JSON array (no prose, no markdown fences):
 [

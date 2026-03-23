@@ -74,21 +74,52 @@ This loop repeats (up to `max_tool_rounds=6`) until `finish_reason == "stop"`.
 For broad analysis requests, a separate **planner → executor → reporter** pipeline
 streams real-time progress via SSE:
 
-1. **Planner** — the LLM decomposes the user's request into 3–8 concrete steps
-   (each either a SQL query or a Python/pandas analysis), with explicit
-   dependencies between steps.
+1. **Planner** — the LLM decomposes the user's request into 3–8 concrete steps.
+   The planner is tuned to **prefer SQL steps** — they are faster and more
+   reliable. Python (pandas) steps are only created when the user's request
+   requires genuine cross-step computation (e.g. correlation between result sets,
+   percentile ranking, pivot tables merging multiple queries). The planner does
+   **not** add a final "synthesis" or "summary" step because the reporter handles
+   that automatically.
 2. **Executor** — for each step, the LLM generates code (SQL or Python), which is
-   executed against the database or in a restricted sandbox. SQL steps reuse the
-   existing `sql_tool.run_sql()` safety rails. Python steps run in a sandbox with
-   only `pandas`, `json`, and `math` available, enforced timeouts, and capped
-   DataFrame sizes.
+   executed against the database or in a restricted sandbox. Key resilience
+   features:
+   - **CTE support** — SQL validation accepts both `SELECT` and `WITH` (CTEs) as
+     starting keywords, enabling complex analytical queries.
+   - **Robust code extraction** — handles markdown fences, reasoning prose, and
+     mixed content from the LLM. Finds the first `SELECT`/`WITH` keyword even
+     when the model prepends explanatory text.
+   - **Retry with error feedback** — if a SQL or Python step fails, the error is
+     fed back to the LLM for up to 2 self-correction attempts. This is
+     especially important for the tricky `M/D/YYYY H:MM` date expressions.
+   - **Empty-code fallback** — if the LLM returns no usable code (e.g. for a
+     vague synthesis step), the raw text response is treated as a summary
+     rather than raising a hard failure.
 3. **Reporter** — completed step results are passed to the LLM, which assembles a
    structured report with an executive summary, narrative sections, and tables.
+   Failed steps are excluded; the report is generated from whatever succeeded.
 
 The pipeline runs in a background thread, pushing SSE events into a thread-safe
 queue. The async generator pulls from the queue and yields events to the frontend
 as they arrive. Concurrency is limited to 3 simultaneous streams via a semaphore,
 with a 3-minute overall pipeline timeout.
+
+#### When the Python sandbox is invoked
+
+The sandbox (`analysis/sandbox.py`) is only called when the planner creates a
+`type: "python"` step. In practice this is rare — most analysis requests
+(including "全面分析一下") produce **all SQL steps**. The sandbox is invoked
+only when the user's request explicitly requires cross-DataFrame operations that
+cannot be expressed in a single SQL query, such as:
+
+- Correlation between metrics from separate queries
+- Percentile ranking across different result sets
+- Pivot tables that merge multiple SQL outputs
+
+The sandbox restricts builtins to a safe set (no `os`, `subprocess`, `sys`,
+`__import__`), caps input DataFrames at 10,000 rows, enforces a 30-second
+timeout, and auto-aliases the last assigned variable to `result` if the LLM
+forgets the mandatory assignment.
 
 ---
 
@@ -122,7 +153,12 @@ message list, enabling multi-turn follow-ups without extra code.
 
 All enforced in `sql_tool.py`:
 
-* **SELECT-only guard** — write/DDL keywords are rejected before execution.
+* **SELECT / CTE guard** — only queries starting with `SELECT` or `WITH` (CTEs)
+  are allowed; all other statements are rejected.
+* **Write-keyword detection** — `INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`,
+  `ALTER`, `REPLACE INTO`, `TRUNCATE`, etc. are blocked. The check is specific
+  enough to allow the SQLite `REPLACE()` string function (only `REPLACE INTO` is
+  blocked).
 * **Single-statement guard** — semicolons inside the query body are rejected.
 * **Auto-LIMIT injection** — raw-row queries without a LIMIT get one appended.
 * **Hard row cap** — `fetchmany(MAX_ROWS)` prevents full-table dumps.
@@ -247,6 +283,12 @@ These cover the four most common filter patterns.
 | Thinking Mode pipeline timeout | `analysis/pipeline.py` | SSE error event sent after 3 minutes |
 | Thinking Mode concurrent overload | `analysis/pipeline.py` | Semaphore rejects with "Too many concurrent analyses" |
 | LLM generates unsafe Python | `analysis/sandbox.py` | Restricted builtins, blocked imports, 30-second thread timeout |
+| LLM omits `result` variable | `analysis/sandbox.py` | Auto-aliases last assigned variable to `result` via static analysis |
+| LLM returns empty code | `analysis/executor.py` | Raw LLM text is treated as summary; retried with feedback if blank |
+| LLM wraps SQL in markdown/prose | `analysis/executor.py` | `_extract_sql()` strips fences/prose, finds first `SELECT`/`WITH` |
+| SQL step fails (bad syntax, etc.) | `analysis/executor.py` | Error is fed back to LLM for up to 2 self-correction retries |
+| CTE query rejected as unsafe | `sql_tool.py` | `WITH` is now accepted alongside `SELECT` as a valid starting keyword |
+| `REPLACE()` function blocked | `sql_tool.py` | Write-keyword regex targets `REPLACE INTO` specifically, not `REPLACE()` |
 | Nested objects in report payload | `AnalysisReport.tsx` | `formatValue()` safely stringifies any non-primitive before rendering |
 
 ---
@@ -262,7 +304,7 @@ These cover the four most common filter patterns.
 | Denormalised schema | Fast reads, but updates (if any) would require care |
 | TEXT date storage | Simple ingestion, but date range queries need explicit conversion |
 | Chat Mode not streamed | Simpler code, but UX feels slower for long responses |
-| Thinking Mode uses `exec()` sandbox | Flexible Python analysis, but sandbox is not a full security boundary |
+| Thinking Mode uses `exec()` sandbox | Flexible Python analysis, but sandbox is not a full security boundary; planner is tuned to prefer SQL steps to minimise sandbox use |
 | Two separate models | gpt-5-mini for fast chat, gpt-5.4 for deeper analysis — good cost/quality split, but Thinking Mode is slower |
 | SQLite | No concurrent writes; not suitable for multi-user production |
 
@@ -367,3 +409,30 @@ Judge overall: 4.94 / 5.0 (avg across 37 scored cases)
   because the regex didn't account for a qualifier between "all" and
   "transactions". The regex was tightened so filtered requests pass through to
   the LLM.
+
+### Lessons from Thinking Mode debugging
+
+* **CTEs were rejected as unsafe** — the original SQL validator only accepted
+  queries beginning with `SELECT`. CTEs (`WITH ... AS (...)`) were blocked as
+  non-SELECT statements. Fix: accept `WITH` as a valid first keyword.
+* **`REPLACE()` function triggered the write guard** — the write-keyword regex
+  blocked `REPLACE` globally, which caught the SQLite `REPLACE(str, from, to)`
+  string function used in date handling. Fix: change the pattern to
+  `REPLACE\s+INTO` so only the DML form is blocked.
+* **LLM wraps SQL in markdown fences or prose** — especially with reasoning
+  models, the LLM often returned SQL wrapped in ` ```sql ... ``` ` fences or
+  preceded by explanatory text. The original code expected a bare SQL string.
+  Fix: `_extract_sql()` strips fences and scans for the first `SELECT`/`WITH`.
+* **Python synthesis steps are fragile and often unnecessary** — the planner
+  sometimes appended a final "综合诊断" (synthesis) step as `type: "python"`.
+  The LLM then generated vague pseudo-code or empty responses because the task
+  was too abstract, causing "Code did not assign a `result` variable" errors.
+  Fix: (a) the planner prompt now explicitly avoids final synthesis steps
+  (reporter does that), (b) the sandbox auto-aliases the last assigned variable
+  to `result`, and (c) the executor returns the raw LLM text as a summary when
+  no usable code is produced.
+* **Reports still generated despite failed steps** — a step failure (e.g. the
+  final Python synthesis step) does not block the reporter. The pipeline feeds
+  all *successful* step results to the reporter, which assembles the report from
+  whatever is available. This is by design — partial results are better than no
+  report at all.

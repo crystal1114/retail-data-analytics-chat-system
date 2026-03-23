@@ -48,7 +48,9 @@ structured report with executive summary, findings, and tables via SSE.
 - **Business metrics** – KPIs, monthly revenue trends, category breakdown, store rankings
 
 **Thinking Mode** handles broad analysis requests by orchestrating a multi-step
-pipeline (planner → executor → reporter) streamed in real time via SSE.
+pipeline (planner → executor → reporter) streamed in real time via SSE. The
+planner favours SQL-only steps for reliability; Python sandbox steps are reserved
+for cross-step computations that SQL alone cannot express.
 
 ---
 
@@ -138,8 +140,8 @@ All example prompts below use real ID formats from the dataset.
 ### 1. Clone / download the repository
 
 ```bash
-git clone <repo-url>
-cd retail-analytics
+git clone https://github.com/crystal1114/retail-data-analytics-chat-system.git
+cd retail-data-analytics-chat-system
 ```
 
 ### 2. Install backend dependencies
@@ -438,21 +440,26 @@ Give me a complete business health report with customer retention insights
 ## Known Limitations
 
 1. **No persistent sessions** – conversation context lives only in the browser.
-  Refreshing the page starts a fresh session.
+   Refreshing the page starts a fresh session.
 2. **Store location is a full address** – the dataset uses full street addresses as
-  the store identifier, not a store code. Queries like "revenue by store" return
+   the store identifier, not a store code. Queries like "revenue by store" return
    full address strings.
 3. **ProductID is a single letter (A–D)** – this is how the dataset is structured.
-  There are only four distinct products.
+   There are only four distinct products.
 4. **Chat mode is not streamed** – Chat Mode waits for the full LLM completion
-  before rendering. Thinking Mode streams progress via SSE.
+   before rendering. Thinking Mode streams progress via SSE.
 5. **OpenAI-only** – the LLM layer is coupled to the OpenAI client. Swapping to
-  Anthropic or a local model would require changes in `chat_service.py` and
+   Anthropic or a local model would require changes in `chat_service.py` and
    the analysis pipeline.
 6. **No authentication** – the API has no authentication layer; do not expose it
-  publicly without adding one.
+   publicly without adding one.
 7. **Thinking Mode concurrency** – limited to 3 concurrent analysis streams to
-  protect backend resources.
+   protect backend resources.
+8. **Python sandbox is not a full security boundary** – the sandbox restricts
+   builtins and blocks dangerous imports, but uses `exec()` in-process. It is
+   adequate for the current trusted-LLM scenario but should not be exposed to
+   untrusted code. The planner is tuned to prefer SQL steps and only generates
+   Python steps for genuine cross-step computation (e.g. correlation, pivots).
 
 ---
 

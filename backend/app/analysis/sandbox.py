@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 from io import StringIO
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_RESULT_ASSIGNED = re.compile(r"^\s*result\s*=", re.MULTILINE)
+_VARIABLE_ASSIGNMENT = re.compile(r"^([a-zA-Z_]\w*)\s*=(?!=)", re.MULTILINE)
 
 _SAFE_BUILTINS = {
     "len": len,
@@ -26,17 +30,32 @@ _SAFE_BUILTINS = {
     "sorted": sorted,
     "enumerate": enumerate,
     "zip": zip,
+    "map": map,
+    "filter": filter,
+    "any": any,
+    "all": all,
+    "chr": chr,
+    "ord": ord,
+    "reversed": reversed,
     "dict": dict,
     "list": list,
     "tuple": tuple,
     "set": set,
+    "frozenset": frozenset,
     "int": int,
     "float": float,
     "str": str,
     "bool": bool,
     "abs": abs,
+    "pow": pow,
+    "divmod": divmod,
     "print": print,
     "isinstance": isinstance,
+    "type": type,
+    "hasattr": hasattr,
+    "getattr": getattr,
+    "format": format,
+    "repr": repr,
     "True": True,
     "False": False,
     "None": None,
@@ -48,6 +67,18 @@ TIMEOUT_SECONDS = 30
 
 class _Timeout(Exception):
     pass
+
+
+def _find_last_assignment(code: str) -> str | None:
+    """Return the name of the last top-level variable assigned in *code*."""
+    skip = {"pd", "json", "math", "df", "print"}
+    last = None
+    for m in _VARIABLE_ASSIGNMENT.finditer(code):
+        name = m.group(1)
+        if name.startswith("_") or name in skip:
+            continue
+        last = name
+    return last
 
 
 def run_code(
@@ -94,6 +125,15 @@ def run_code(
         df = pd.DataFrame(rows, columns=cols) if cols else pd.DataFrame()
         namespace[f"step_{sid}"] = df
 
+    # If the code never assigns `result`, find the last assigned variable
+    # and append `result = <that_var>` so the sandbox can capture it.
+    effective_code = code
+    if not _RESULT_ASSIGNED.search(code):
+        last_var = _find_last_assignment(code)
+        if last_var:
+            logger.info("Code missing `result =` — auto-aliasing result = %s", last_var)
+            effective_code = code + f"\nresult = {last_var}\n"
+
     # Capture print output
     output_buf = StringIO()
     namespace["print"] = lambda *a, **kw: print(*a, file=output_buf, **kw)
@@ -103,7 +143,7 @@ def run_code(
 
     def _target():
         try:
-            exec(code, namespace)  # noqa: S102
+            exec(effective_code, namespace)  # noqa: S102
         except Exception as e:
             exc_holder.append(e)
 
@@ -119,10 +159,13 @@ def run_code(
 
     # Extract result
     result = namespace.get("result")
+
     if result is None:
         printed = output_buf.getvalue().strip()
         if printed:
             return {"ok": True, "summary": printed}
+
+    if result is None:
         return {"ok": False, "error": "Code did not assign a `result` variable"}
 
     if isinstance(result, str):
