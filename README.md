@@ -34,7 +34,7 @@ structured report with executive summary, findings, and tables via SSE.
 | Item           | Detail                                                             |
 | -------------- | ------------------------------------------------------------------ |
 | **Name**       | Retail Data Analytics Chat System                                  |
-| **Dataset**    | Kaggle Retail Transaction Dataset (~200 k rows)                    |
+| **Dataset**    | Kaggle Retail Transaction Dataset (~100 k rows)                    |
 | **Backend**    | FastAPI + Python, SQLite, OpenAI (NL → SQL via `execute_sql` tool) |
 | **Frontend**   | React + Vite + TypeScript                                          |
 | **LLM**        | OpenAI (Chat: `gpt-4o-mini`, Thinking: `gpt-5.4` + low reasoning effort) |

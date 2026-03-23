@@ -141,11 +141,11 @@
 
 .debugArgs {
   flex: 1;
+  min-width: 0;
   font-size: 10px;
   font-family: ui-monospace, monospace;
   color: var(--color-text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-x: auto;
   white-space: nowrap;
 }
 

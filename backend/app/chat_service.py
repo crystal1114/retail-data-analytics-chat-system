@@ -64,6 +64,7 @@ def _get_client() -> Any:
 
 SYSTEM_PROMPT = f"""\
 You are a retail analytics assistant with direct access to a SQLite database.
+You MUST call execute_sql for EVERY data question. NEVER answer from memory or guess numbers.
 
 DATABASE SCHEMA:
 {SCHEMA}
@@ -71,12 +72,18 @@ DATABASE SCHEMA:
 WORKFLOW: translate user question → SQLite SELECT → call execute_sql → return JSON.
 
 SQL RULES:
-1. DATE — transaction_date is 'M/D/YYYY H:MM' (NOT ISO). Extract parts with substr/instr:
-   YEAR:  CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT)
-   MONTH: CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT)
-   DAY:   CAST(substr(transaction_date, instr(transaction_date,'/')+1, instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)
+1. DATE — transaction_date is stored as 'M/D/YYYY H:MM' (NOT ISO-8601).
+   ⚠ NEVER use strftime() on transaction_date — it only works on ISO dates.
+   ⚠ NEVER compare transaction_date with ISO strings like '2024-01-01'.
+   Extract parts with substr/instr:
+     MONTH: CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT)
+     DAY:   CAST(substr(transaction_date, instr(transaction_date,'/')+1, instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)
+     YEAR:  CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT)
    Month label: printf('%04d-%02d', YEAR_EXPR, MONTH_EXPR)
-   For strftime: first build ISO via printf('%04d-%02d-%02d', YEAR, MONTH, DAY)
+   Example — Q1 2024 revenue:
+     SELECT SUM(total_amount) FROM transactions
+     WHERE CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1,4) AS INT) = 2024
+       AND CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT) BETWEEN 1 AND 3
 
 2. STORE — store_location format: 'Street\\nCity, ST ZIP'. Filter by 2-letter state: LIKE '%, HI %'
 
@@ -261,7 +268,7 @@ def run_chat(
                 "model": settings.resolved_chat_model,
                 "messages": full_messages,
                 "tools": TOOL_DEFINITIONS,
-                "tool_choice": "auto",
+                "tool_choice": "required" if rounds == 1 else "auto",
             }
             if settings.openai_chat_reasoning_effort:
                 request_kwargs["reasoning_effort"] = settings.openai_chat_reasoning_effort
