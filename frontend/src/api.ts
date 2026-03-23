@@ -20,6 +20,18 @@ export async function checkHealth(): Promise<HealthResponse> {
   return data;
 }
 
+// ── Voice transcription ──────────────────────────────────────────────────────
+
+export async function transcribeAudio(audioBlob: Blob): Promise<string> {
+  const form = new FormData();
+  form.append('file', audioBlob, 'recording.webm');
+  const { data } = await client.post<{ text: string }>('/api/transcribe', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30_000,
+  });
+  return data.text;
+}
+
 // ── Analysis SSE stream ─────────────────────────────────────────────────────
 
 export function streamAnalysis(

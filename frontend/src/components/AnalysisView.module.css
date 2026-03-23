@@ -225,3 +225,89 @@
 .retryBtn:hover {
   background: rgba(248,113,113,0.08);
 }
+
+/* ── Mic + action row ──────────────────────────────────────────── */
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.micBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--color-text-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.micBtn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.18);
+  color: var(--color-text-1);
+}
+
+.micBtn:disabled {
+  opacity: 0.22;
+  cursor: not-allowed;
+}
+
+.micBtnRecording {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.5);
+  color: #ef4444;
+  animation: micPulse 1.2s ease-in-out infinite;
+}
+
+.micBtnRecording:hover:not(:disabled) {
+  background: rgba(239,68,68,0.25);
+  border-color: rgba(239,68,68,0.7);
+  color: #f87171;
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.35); }
+  50%      { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+}
+
+.micSpinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-top-color: var(--color-accent-hi);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.micError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.20);
+  border-radius: 8px;
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.micError button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  opacity: 0.6;
+}
+
+.micError button:hover {
+  opacity: 1;
+}

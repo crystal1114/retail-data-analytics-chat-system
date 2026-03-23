@@ -16,9 +16,11 @@ the flexible /api/chat endpoint using LLM-generated SQL.
 
 from __future__ import annotations
 
+import io
+import logging
 import sqlite3
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -28,6 +30,8 @@ from .chat_service import run_chat
 from .config import settings
 from .db import get_db
 from .schemas import ChatRequest, ChatResponse, HealthResponse
+
+logger = logging.getLogger(__name__)
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 
@@ -107,6 +111,51 @@ async def analysis(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── Voice transcription (Whisper) ────────────────────────────────────────────
+
+_MAX_AUDIO_BYTES = 25 * 1024 * 1024  # Whisper limit: 25 MB
+
+
+@app.post("/api/transcribe", tags=["Voice"])
+async def transcribe(file: UploadFile = File(...)) -> dict[str, str]:
+    """
+    Transcribe an audio file to text using OpenAI Whisper.
+
+    Accepts any format Whisper supports (webm, mp3, mp4, wav, etc.).
+    Returns ``{"text": "transcribed text"}``.
+    """
+    if not settings.openai_configured:
+        raise HTTPException(status_code=503, detail="OpenAI API key not configured")
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise HTTPException(status_code=503, detail="openai package not installed")
+
+    audio_bytes = await file.read()
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Audio file exceeds 25 MB limit")
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+
+    kwargs: dict = {"api_key": settings.openai_api_key}
+    if settings.openai_base_url:
+        kwargs["base_url"] = settings.openai_base_url
+    client = OpenAI(**kwargs)
+
+    try:
+        ext = (file.filename or "audio.webm").rsplit(".", 1)[-1] or "webm"
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(f"audio.{ext}", io.BytesIO(audio_bytes)),
+        )
+    except Exception as exc:
+        logger.error("Whisper transcription failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}")
+
+    return {"text": transcript.text}
 
 
 # ── Root ──────────────────────────────────────────────────────────────────────

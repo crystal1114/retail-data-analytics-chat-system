@@ -9,8 +9,9 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │  React Frontend (Vite)                                              │
-│    ├── Chat Mode  → POST /api/chat      → FastAPI (sync JSON)      │
-│    └── Thinking   → POST /api/analysis  → FastAPI (SSE stream)     │
+│    ├── Chat Mode  → POST /api/chat       → FastAPI (sync JSON)     │
+│    ├── Thinking   → POST /api/analysis   → FastAPI (SSE stream)    │
+│    └── Voice      → POST /api/transcribe → OpenAI Whisper (STT)    │
 │                                                                     │
 │  ── Chat Mode (gpt-4o-mini) ──────────────────────────────────────  │
 │  chat_service.run_chat()                                            │
@@ -43,8 +44,9 @@
 | `backend/app/analysis/sandbox.py` | Restricted Python sandbox for LLM-generated pandas code |
 | `backend/app/analysis/reporter.py` | Assembles step results into a structured report via LLM |
 | `backend/app/analysis/schemas.py` | Pydantic models for analysis pipeline data structures |
-| `backend/app/main.py` | FastAPI app (`/api/health`, `/api/chat`, `/api/analysis`), CORS |
-| `frontend/src/App.tsx` | React UI with Chat/Thinking Mode toggle |
+| `backend/app/main.py` | FastAPI app (`/api/health`, `/api/chat`, `/api/analysis`, `/api/transcribe`), CORS |
+| `frontend/src/hooks/useMicRecorder.ts` | Shared React hook — MediaRecorder + Whisper transcription lifecycle |
+| `frontend/src/App.tsx` | React UI with Chat/Thinking Mode toggle, voice input |
 | `frontend/src/components/AnalysisView.tsx` | Thinking Mode UI: input, real-time progress, report display |
 | `frontend/src/components/AnalysisReport.tsx` | Renders structured analysis report with tables |
 
@@ -204,6 +206,23 @@ phase (planning, code generation, report assembly). GPT-5.4 is used with
 `reasoning_effort=low` — enough reasoning to improve reliability without excessive
 latency. The pipeline adapts to GPT-5.4's API requirements
 (`max_completion_tokens`, no custom `temperature`).
+
+### Voice input (Whisper)
+
+Both Chat Mode and Thinking Mode include a microphone button. The frontend
+records audio via `MediaRecorder` (webm/opus), sends it to `POST /api/transcribe`,
+which forwards the file to OpenAI Whisper (`whisper-1`). The transcribed text
+is inserted into the textarea for review before sending — no auto-send, so the
+user can correct any misheard words.
+
+Key design decisions:
+- **Shared `useMicRecorder` hook** — recording logic is extracted into a reusable
+  hook used by both `App.tsx` (Chat Mode) and `AnalysisView.tsx` (Thinking Mode).
+- **webm/opus format** — smallest file size, natively supported by all modern
+  browsers' `MediaRecorder`, accepted directly by Whisper.
+- **No auto-send** — transcribed text goes into the textarea for review. This
+  avoids sending misheard queries to the LLM pipeline.
+- **Cost** — Whisper costs $0.006/min; a typical 5–10 second question is ~$0.001.
 
 ### Intent and flexibility
 
@@ -393,9 +412,13 @@ EVAL_JUDGE=1 pytest -m eval -v
 ### Results from latest run
 
 ```
-Eval Results: 37/37 passed (100%)
-Judge overall: 4.94 / 5.0 (avg across 37 scored cases)
+Eval Results: 34/37 passed (91.9%)
+Judge overall: 4.83 / 5.0 (avg across 37 scored cases)
 ```
+
+The 3 remaining failures are all intent/viz classification edge cases (data is
+100% correct, judge scores 5.0/5.0 on each). For example, "top 3 customers"
+is classified as `customer_query` instead of `ranking_query`.
 
 ### Lessons from early eval runs
 

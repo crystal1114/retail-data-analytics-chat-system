@@ -47,6 +47,9 @@ structured report with executive summary, findings, and tables via SSE.
 - **Product queries** – revenue, units sold, average discount, stores
 - **Business metrics** – KPIs, monthly revenue trends, category breakdown, store rankings
 
+Both modes support **voice input** — click the microphone button, speak your
+question, and the audio is transcribed via OpenAI Whisper before sending.
+
 **Thinking Mode** handles broad analysis requests by orchestrating a multi-step
 pipeline (planner → executor → reporter) streamed in real time via SSE. The
 planner favours SQL-only steps for reliability; Python sandbox steps are reserved
@@ -352,6 +355,21 @@ Response (fields may vary; `structured` holds optional chart/KPI payloads for th
   },
   "tool_results": [...],
   "metadata": { "model": "gpt-4o-mini", "tool_rounds": 2 }
+}
+```
+
+### `POST /api/transcribe`
+
+Voice input endpoint. Accepts a `multipart/form-data` audio file (webm, mp3,
+wav, etc.) and returns the Whisper transcription.
+
+Request: `multipart/form-data` with a `file` field containing the audio.
+
+Response:
+
+```json
+{
+  "text": "What is the total revenue?"
 }
 ```
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { streamAnalysis } from '../api';
+import { useMicRecorder } from '../hooks/useMicRecorder';
 import type {
   AnalysisPhase,
   AnalysisReport as ReportType,
@@ -98,7 +99,13 @@ interface Props {
 
 export default function AnalysisView({ state, dispatch }: Props) {
   const [prompt, setPrompt] = useState('');
+  const [micError, setMicError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+
+  const mic = useMicRecorder({
+    onTranscript: (text) => setPrompt((prev) => (prev ? `${prev} ${text}` : text)),
+    onError: (msg) => setMicError(msg),
+  });
 
   const handleEvent = useCallback((event: AnalysisSSEEvent) => {
     switch (event.type) {
@@ -180,13 +187,39 @@ export default function AnalysisView({ state, dispatch }: Props) {
             placeholder="e.g. Analyze overall business performance, customer segments, product trends, and seasonal patterns…"
             rows={3}
           />
-          <button
-            className={styles.runBtn}
-            onClick={handleSubmit}
-            disabled={!prompt.trim()}
-          >
-            Run Analysis
-          </button>
+          {micError && (
+            <div className={styles.micError}>
+              {micError}
+              <button onClick={() => setMicError(null)} aria-label="Dismiss">✕</button>
+            </div>
+          )}
+          <div className={styles.actionRow}>
+            <button
+              className={`${styles.micBtn} ${mic.status === 'recording' ? styles.micBtnRecording : ''}`}
+              onClick={mic.toggle}
+              disabled={mic.status === 'transcribing'}
+              title={mic.status === 'recording' ? 'Stop recording' : 'Voice input'}
+              aria-label={mic.status === 'recording' ? 'Stop recording' : 'Voice input'}
+            >
+              {mic.status === 'transcribing' ? (
+                <span className={styles.micSpinner} />
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="1" width="6" height="12" rx="3" />
+                  <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              )}
+            </button>
+            <button
+              className={styles.runBtn}
+              onClick={handleSubmit}
+              disabled={!prompt.trim()}
+            >
+              Run Analysis
+            </button>
+          </div>
         </div>
       </div>
     );
