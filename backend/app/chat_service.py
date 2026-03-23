@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import time
 from typing import Any
 
 try:
@@ -67,107 +68,37 @@ You are a retail analytics assistant with direct access to a SQLite database.
 DATABASE SCHEMA:
 {SCHEMA}
 
-YOUR WORKFLOW:
-1. Translate the user's question into a precise SQLite SELECT query.
-2. Call the execute_sql tool with that query.
-3. After receiving the results, produce a final JSON response (see format below).
+WORKFLOW: translate user question → SQLite SELECT → call execute_sql → return JSON.
 
-══ CRITICAL SQL RULES ══
+SQL RULES:
+1. DATE — transaction_date is 'M/D/YYYY H:MM' (NOT ISO). Extract parts with substr/instr:
+   YEAR:  CAST(substr(transaction_date, instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1, 4) AS INT)
+   MONTH: CAST(substr(transaction_date, 1, instr(transaction_date,'/')-1) AS INT)
+   DAY:   CAST(substr(transaction_date, instr(transaction_date,'/')+1, instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)
+   Month label: printf('%04d-%02d', YEAR_EXPR, MONTH_EXPR)
+   For strftime: first build ISO via printf('%04d-%02d-%02d', YEAR, MONTH, DAY)
 
-1. DATE FORMAT — transaction_date is 'M/D/YYYY H:MM' (NOT ISO). strftime() returns NULL on raw dates.
-   You MUST always convert to ISO first:
+2. STORE — store_location format: 'Street\\nCity, ST ZIP'. Filter by 2-letter state: LIKE '%, HI %'
 
-   ISO date expression (copy exactly):
-     printf('%04d-%02d-%02d',
-       CAST(substr(transaction_date,
-         instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1,4) AS INT),
-       CAST(substr(transaction_date,1,instr(transaction_date,'/')-1) AS INT),
-       CAST(substr(transaction_date,
-         instr(transaction_date,'/')+1,
-         instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT))
+3. GENERAL — ORDER meaningfully. ROUND money to 2dp. LIMIT top-N. Only SELECT/WITH allowed.
+   Write ONE query per question (use CTEs/subqueries, not multiple tool calls).
+   100K rows — raw queries auto-capped at {PREVIEW_ROWS}; suggest narrowing if truncated.
 
-   Month grouping:  printf('%04d-%02d', YEAR_INT, MONTH_INT)
-   Day of week:     strftime('%w', <ISO_EXPR>) → '0'=Sun, '1'=Mon … '6'=Sat
-   Day name:        CASE strftime('%w',<ISO_EXPR>) WHEN '0' THEN 'Sunday' WHEN '1' THEN 'Monday'
-                    WHEN '2' THEN 'Tuesday' WHEN '3' THEN 'Wednesday' WHEN '4' THEN 'Thursday'
-                    WHEN '5' THEN 'Friday' WHEN '6' THEN 'Saturday' END
-
-   ⚠️ COLUMN ALIAS ORDER — in SQLite the alias MUST come immediately after each expression.
-   CORRECT day-of-week query (copy this pattern exactly, get ALL 7 days not just the max):
-     SELECT
-       CASE strftime('%w', printf('%04d-%02d-%02d',
-           CAST(substr(transaction_date,instr(transaction_date,'/')+instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')+1,4) AS INT),
-           CAST(substr(transaction_date,1,instr(transaction_date,'/')-1) AS INT),
-           CAST(substr(transaction_date,instr(transaction_date,'/')+1,instr(substr(transaction_date,instr(transaction_date,'/')+1),'/')-1) AS INT)))
-         WHEN '0' THEN 'Sunday' WHEN '1' THEN 'Monday' WHEN '2' THEN 'Tuesday'
-         WHEN '3' THEN 'Wednesday' WHEN '4' THEN 'Thursday'
-         WHEN '5' THEN 'Friday' WHEN '6' THEN 'Saturday' END AS day_name,
-       COUNT(*) AS tx_count
-     FROM transactions
-     GROUP BY day_name
-     ORDER BY tx_count DESC
-
-2. STORE LOCATION — format is multi-line: 'Street\\nCity, STATE ZIP'
-   STATE is always a 2-letter US abbreviation. NEVER filter by full state name.
-   Examples:
-     Hawaii     → WHERE store_location LIKE '%, HI %'
-     California → WHERE store_location LIKE '%, CA %'
-     New York   → WHERE store_location LIKE '%, NY %'
-     Texas      → WHERE store_location LIKE '%, TX %'
-
-   ⚠️ For "revenue by store in STATE" queries, ALWAYS aggregate (GROUP BY + SUM) in a single query.
-   Do NOT first select raw rows and then aggregate in a second round.
-   Correct pattern for "revenue for stores in Hawaii":
-     SELECT store_location, ROUND(SUM(total_amount),2) AS revenue
-     FROM transactions
-     WHERE store_location LIKE '%, HI %'
-     GROUP BY store_location
-     ORDER BY revenue DESC
-     LIMIT 20
-
-3. GENERAL — Always ORDER results meaningfully. ROUND monetary values to 2dp.
-   Use LIMIT for top-N queries. Only SELECT is allowed.
-   ⚠️ EFFICIENCY — Write ONE query that answers the full question. Never run an exploratory
-   query first and then a second aggregation query. If a question asks for "total + breakdown",
-   compute both in a single SQL call using subqueries, CTEs (WITH), or SUM() OVER() windows.
-
-4. ROW LIMITS — The database has 100,000 rows. Raw-row queries without LIMIT are automatically
-   capped at {PREVIEW_ROWS} rows. When the result is truncated, acknowledge it in your answer
-   and suggest the user narrow the query (add a filter, date range, or category).
-   NEVER attempt to return or promise the full 100,000-row dataset.
-
-FINAL RESPONSE FORMAT — after receiving SQL results, return ONLY this JSON (no markdown):
+RESPONSE FORMAT — after SQL results, return ONLY this JSON:
 {{
-  "intent": "<customer_query | product_query | trend_query | comparison_query | ranking_query | distribution_query | kpi_query | custom_query>",
-  "viz_type": "<line_chart | bar_chart | horizontal_bar_chart | pie_chart | table | kpi_card | none>",
-  "insight": "<1-2 sentence key finding grounded in the query results>",
-  "chart_data": <structured data for the chosen viz, or null>,
-  "answer": "<full natural-language answer with formatted numbers>"
+  "intent": "<customer_query|product_query|trend_query|comparison_query|ranking_query|distribution_query|kpi_query|custom_query>",
+  "viz_type": "<line_chart|bar_chart|horizontal_bar_chart|pie_chart|table|kpi_card|none>",
+  "insight": "<1-2 sentence finding>",
+  "chart_data": <see shapes below, or null>,
+  "answer": "<natural-language answer with formatted numbers>"
 }}
 
-VIZ TYPE RULES:
-- Time trend (monthly/yearly) → line_chart
-- Category/product comparison (2–8 groups) → bar_chart
-- Ranking / top-N → horizontal_bar_chart
-- Share / distribution / % breakdown → pie_chart
-- Customer purchase list, store detail, tabular results → table
-- Single metric or overall KPIs → kpi_card
-- Unclear or conversational → none
-
-CHART DATA SHAPES:
-line_chart / bar_chart / horizontal_bar_chart:
-  {{"labels": ["2023-04",...], "datasets": [{{"label": "Revenue ($)", "data": [1234.56,...]}}]}}
-
-pie_chart:
-  {{"labels": ["Cash",...], "datasets": [{{"label": "Share", "data": [25.5,...]}}]}}
-
-kpi_card:
-  {{"kpis": [{{"label": "Total Revenue", "value": "$24,833,495", "icon": "💰"}}, ...]}}
-
-table:
-  {{"columns": ["Store","Revenue"], "rows": [["123 Main St, Springfield, IL","$12345.67"],...]}}
-
-IMPORTANT: Your final reply must be the JSON object only — no prose before or after it.
+viz_type: time trend→line_chart, category comparison→bar_chart, ranking→horizontal_bar_chart, share→pie_chart, list→table, single metric→kpi_card
+chart_data shapes:
+  line/bar/horizontal_bar: {{"labels":[...],"datasets":[{{"label":"...","data":[...]}}]}}
+  pie: {{"labels":[...],"datasets":[{{"label":"Share","data":[...]}}]}}
+  kpi_card: {{"kpis":[{{"label":"...","value":"...","icon":"..."}}]}}
+  table: {{"columns":[...],"rows":[[...]]}}
 """
 
 
@@ -320,15 +251,22 @@ def run_chat(
     # Collect metadata from tool calls for pass-through
     result_meta: dict[str, Any] = {}
 
+    t_start = time.monotonic()
+
     while rounds < max_tool_rounds:
         rounds += 1
         try:
-            response = client.chat.completions.create(
-                model=settings.resolved_chat_model,
-                messages=full_messages,
-                tools=TOOL_DEFINITIONS,
-                tool_choice="auto",
-            )
+            t_llm = time.monotonic()
+            request_kwargs: dict[str, Any] = {
+                "model": settings.resolved_chat_model,
+                "messages": full_messages,
+                "tools": TOOL_DEFINITIONS,
+                "tool_choice": "auto",
+            }
+            if settings.openai_chat_reasoning_effort:
+                request_kwargs["reasoning_effort"] = settings.openai_chat_reasoning_effort
+            response = client.chat.completions.create(**request_kwargs)
+            logger.info("LLM round %d: %.2fs", rounds, time.monotonic() - t_llm)
         except Exception as exc:
             logger.error("OpenAI API error: %s", exc)
             return {

@@ -164,12 +164,10 @@ def run_sql(
         raw_rows = cursor.fetchmany(MAX_ROWS + 1)
         has_more = len(raw_rows) > MAX_ROWS
         row_list = [list(r) for r in raw_rows[:MAX_ROWS]]
-        truncated = has_more or limit_injected
 
         # Try to get total_rows count for pagination metadata on raw-row queries
         total_rows: int | None = None
         if limit_injected and not has_more:
-            # We added a limit, so total may be larger — run COUNT(*) as subquery
             try:
                 count_sql = f"SELECT COUNT(*) FROM ({sql.rstrip().rstrip(';')})"
                 cnt_cursor = conn.execute(count_sql)
@@ -179,6 +177,9 @@ def run_sql(
                     has_more = total_rows > (offset + len(row_list))
             except Exception:
                 pass  # count is best-effort
+
+        # Evaluate truncated AFTER the count check so we know the true has_more
+        truncated = has_more
 
         return {
             "ok": True,

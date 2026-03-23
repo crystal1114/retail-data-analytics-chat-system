@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { streamAnalysis } from '../api';
 import type {
   AnalysisPhase,
@@ -9,9 +9,9 @@ import type {
 import AnalysisReport from './AnalysisReport';
 import styles from './AnalysisView.module.css';
 
-// ── State management via reducer ────────────────────────────────────────────
+// ── State management via reducer (exported so App can own the state) ────────
 
-interface AnalysisState {
+export interface AnalysisState {
   phase: AnalysisPhase;
   steps: AnalysisStepInfo[];
   currentStep: number;
@@ -20,7 +20,7 @@ interface AnalysisState {
   error: string | null;
 }
 
-const initialState: AnalysisState = {
+export const analysisInitialState: AnalysisState = {
   phase: 'idle',
   steps: [],
   currentStep: 0,
@@ -29,7 +29,7 @@ const initialState: AnalysisState = {
   error: null,
 };
 
-type Action =
+export type AnalysisAction =
   | { type: 'RESET' }
   | { type: 'SET_PHASE'; phase: AnalysisPhase }
   | { type: 'SET_PLAN'; steps: Array<{ step_id: string; title: string; type: string }> }
@@ -38,10 +38,10 @@ type Action =
   | { type: 'SET_REPORT'; report: ReportType }
   | { type: 'SET_ERROR'; message: string };
 
-function reducer(state: AnalysisState, action: Action): AnalysisState {
+export function analysisReducer(state: AnalysisState, action: AnalysisAction): AnalysisState {
   switch (action.type) {
     case 'RESET':
-      return { ...initialState };
+      return { ...analysisInitialState };
 
     case 'SET_PHASE':
       return { ...state, phase: action.phase };
@@ -91,9 +91,13 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function AnalysisView() {
+interface Props {
+  state: AnalysisState;
+  dispatch: React.Dispatch<AnalysisAction>;
+}
+
+export default function AnalysisView({ state, dispatch }: Props) {
   const [prompt, setPrompt] = useState('');
-  const [state, dispatch] = useReducer(reducer, initialState);
   const controllerRef = useRef<AbortController | null>(null);
 
   const handleEvent = useCallback((event: AnalysisSSEEvent) => {
@@ -133,25 +137,25 @@ export default function AnalysisView() {
         dispatch({ type: 'SET_ERROR', message: event.message });
         break;
     }
-  }, []);
+  }, [dispatch]);
 
   const handleSubmit = useCallback(() => {
     if (!prompt.trim()) return;
     dispatch({ type: 'RESET' });
     dispatch({ type: 'SET_PHASE', phase: 'planning' });
     controllerRef.current = streamAnalysis(prompt.trim(), handleEvent);
-  }, [prompt, handleEvent]);
+  }, [prompt, handleEvent, dispatch]);
 
   const handleCancel = useCallback(() => {
     controllerRef.current?.abort();
     dispatch({ type: 'SET_ERROR', message: 'Analysis cancelled.' });
-  }, []);
+  }, [dispatch]);
 
   const handleNewAnalysis = useCallback(() => {
     controllerRef.current?.abort();
     dispatch({ type: 'RESET' });
     setPrompt('');
-  }, []);
+  }, [dispatch]);
 
   const isRunning = ['planning', 'executing', 'reporting'].includes(state.phase);
   const phaseLabels: Record<string, string> = {
@@ -160,7 +164,6 @@ export default function AnalysisView() {
     reporting: 'Generating report…',
   };
 
-  // ── Idle: input form ──────────────────────────────────────────────────────
   if (state.phase === 'idle') {
     return (
       <div className={styles.container}>
@@ -189,7 +192,6 @@ export default function AnalysisView() {
     );
   }
 
-  // ── Done: show report ─────────────────────────────────────────────────────
   if (state.phase === 'done' && state.report) {
     return (
       <div className={styles.container}>
@@ -198,7 +200,6 @@ export default function AnalysisView() {
     );
   }
 
-  // ── Error ─────────────────────────────────────────────────────────────────
   if (state.phase === 'error') {
     return (
       <div className={styles.container}>
@@ -213,7 +214,6 @@ export default function AnalysisView() {
     );
   }
 
-  // ── Running: progress panel ───────────────────────────────────────────────
   return (
     <div className={styles.container}>
       <div className={styles.progressPanel}>

@@ -1,7 +1,10 @@
 // src/App.tsx
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useReducer, useState } from 'react';
 import { checkHealth, sendChat } from './api';
-import AnalysisView from './components/AnalysisView';
+import AnalysisView, {
+  analysisReducer,
+  analysisInitialState,
+} from './components/AnalysisView';
 import ChatBubble from './components/ChatBubble';
 import TypingIndicator from './components/TypingIndicator';
 import type { ChatMessage, HealthResponse, ToolResult, StructuredResponse, ResultMeta } from './types';
@@ -53,6 +56,9 @@ export default function App() {
   const [loading, setLoading]                 = useState(false);
   const [error, setError]                     = useState<string | null>(null);
   const [health, setHealth]                   = useState<HealthResponse | null>(null);
+
+  // Analysis state lives here so it persists across mode switches
+  const [analysisState, analysisDispatch] = useReducer(analysisReducer, analysisInitialState);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
@@ -221,7 +227,7 @@ export default function App() {
 
         {/* ── Thinking Mode ──────────────────────────────────────────── */}
         {mode === 'thinking' ? (
-          <AnalysisView />
+          <AnalysisView state={analysisState} dispatch={analysisDispatch} />
         ) : (
         <>
         {/* Messages / Welcome */}
@@ -271,7 +277,6 @@ export default function App() {
 
         {/* Composer */}
         <div className={styles.inputArea}>
-
           <div className={styles.inputWrapper}>
             <textarea
               ref={textareaRef}

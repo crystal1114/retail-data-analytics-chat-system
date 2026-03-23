@@ -12,7 +12,7 @@
 │    ├── Chat Mode  → POST /api/chat      → FastAPI (sync JSON)      │
 │    └── Thinking   → POST /api/analysis  → FastAPI (SSE stream)     │
 │                                                                     │
-│  ── Chat Mode (gpt-5-mini) ──────────────────────────────────────  │
+│  ── Chat Mode (gpt-4o-mini) ──────────────────────────────────────  │
 │  chat_service.run_chat()                                            │
 │      │  OpenAI Chat API — model drafts SQLite SELECT                │
 │      │  ◄── execute_sql(query) ──┐                                  │
@@ -52,7 +52,7 @@
 
 ## How the LLM Is Integrated with the Data Layer
 
-### Chat Mode (gpt-5-mini)
+### Chat Mode (gpt-4o-mini)
 
 The system uses a **NL → SQL → Answer** pipeline:
 
@@ -305,7 +305,7 @@ These cover the four most common filter patterns.
 | TEXT date storage | Simple ingestion, but date range queries need explicit conversion |
 | Chat Mode not streamed | Simpler code, but UX feels slower for long responses |
 | Thinking Mode uses `exec()` sandbox | Flexible Python analysis, but sandbox is not a full security boundary; planner is tuned to prefer SQL steps to minimise sandbox use |
-| Two separate models | gpt-5-mini for fast chat, gpt-5.4 for deeper analysis — good cost/quality split, but Thinking Mode is slower |
+| Two separate models | gpt-4o-mini for fast chat, gpt-5.4 for deeper analysis — good cost/quality split, but Thinking Mode is slower |
 | SQLite | No concurrent writes; not suitable for multi-user production |
 
 ### Recommended Next Steps

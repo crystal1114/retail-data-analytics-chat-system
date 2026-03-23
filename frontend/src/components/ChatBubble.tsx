@@ -88,12 +88,10 @@ function TruncationBanner({ meta }: { meta: ResultMeta }) {
     );
   }
 
-  if (truncated || limit_injected) {
+  if (truncated || has_more) {
     const label = has_more && total_rows
       ? `Showing a preview of ${total_rows.toLocaleString()} total rows`
-      : limit_injected
-        ? 'Results automatically limited to a preview'
-        : 'Results truncated to fit the response';
+      : 'Results truncated to fit the response';
     return (
       <div className={`${styles.banner} ${styles.bannerInfo}`}>
         <span className={styles.bannerIcon}>📄</span>
@@ -150,7 +148,7 @@ export default function ChatBubble({ message, toolResults = [], structured, resu
   const hasViz = structured && structured.viz_type !== 'none' && structured.chart_data;
   const showBanner = !isUser && resultMeta && (
     resultMeta.truncated ||
-    resultMeta.limit_injected ||
+    resultMeta.has_more ||
     resultMeta.fallback_mode ||
     resultMeta.warning === 'max_tool_rounds_exceeded'
   );
