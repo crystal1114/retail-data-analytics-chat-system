@@ -56,6 +56,10 @@ for cross-step computations that SQL alone cannot express.
 
 ## Demo
 
+### Video walkthrough
+
+[![Video Demo](https://img.shields.io/badge/▶_Watch_Demo-Google_Drive-4285F4?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1fKi5wxTlHlgjYzy3csRhVoYNvMW2o36D/view?usp=sharing)
+
 ### Welcome screen — suggested prompts to get started
 
 ![Welcome screen](docs/screenshots/welcome.jpg)
