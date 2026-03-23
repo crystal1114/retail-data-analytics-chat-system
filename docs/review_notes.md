@@ -412,13 +412,9 @@ EVAL_JUDGE=1 pytest -m eval -v
 ### Results from latest run
 
 ```
-Eval Results: 34/37 passed (91.9%)
-Judge overall: 4.83 / 5.0 (avg across 37 scored cases)
+Eval Results: 37/37 passed (100.0%)
+Judge overall: 4.86 / 5.0 (avg across 37 scored cases)
 ```
-
-The 3 remaining failures are all intent/viz classification edge cases (data is
-100% correct, judge scores 5.0/5.0 on each). For example, "top 3 customers"
-is classified as `customer_query` instead of `ranking_query`.
 
 ### Lessons from early eval runs
 

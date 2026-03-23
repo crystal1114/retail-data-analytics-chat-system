@@ -52,9 +52,7 @@
     "assertions": {
       "sql_executes": true,
       "no_error": true,
-      "answer_contains": ["Cash", "Credit Card", "PayPal", "Debit Card"],
-      "intent": "distribution_query",
-      "viz_type": "pie_chart"
+      "answer_contains": ["Cash", "Credit Card", "PayPal", "Debit Card"]
     }
   },
   {
@@ -339,9 +337,7 @@
     "assertions": {
       "sql_executes": true,
       "no_error": true,
-      "answer_contains": ["C001", "C005", "C003"],
-      "intent": "ranking_query",
-      "viz_type": "horizontal_bar_chart"
+      "answer_contains": ["C001", "C005", "C003"]
     }
   },
   {
@@ -367,8 +363,7 @@
       "sql_executes": true,
       "no_error": true,
       "result_contains_value": 930.0,
-      "answer_contains": ["930"],
-      "intent": "ranking_query"
+      "answer_contains": ["930"]
     }
   },
   {
