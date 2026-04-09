@@ -20,7 +20,8 @@ structured report with executive summary, findings, and tables via SSE.
 5. [Setup Instructions](#setup-instructions)
 6. [Running the Backend](#running-the-backend)
 7. [Running the Frontend](#running-the-frontend)
-8. [Running Tests](#running-tests)
+8. [Freeing Ports](#freeing-ports)
+9. [Running Tests](#running-tests)
 9. [API Reference](#api-reference)
 10. [Example Prompts](#example-prompts)
 11. [Known Limitations](#known-limitations)
@@ -62,6 +63,10 @@ for cross-step computations that SQL alone cannot express.
 ### Video walkthrough
 
 [![Video Demo](https://img.shields.io/badge/▶_Watch_Demo-Google_Drive-4285F4?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1fKi5wxTlHlgjYzy3csRhVoYNvMW2o36D/view?usp=sharing)
+
+### Video walkthrough (Demo2 — with voice input)
+
+[![Video Demo2](https://img.shields.io/badge/▶_Watch_Demo2_(Voice)-Google_Drive-4285F4?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1R7DO9r4cY6rtewNgUYrvczpxPjrqyvyg/view?usp=sharing)
 
 ### Welcome screen — suggested prompts to get started
 
@@ -263,6 +268,23 @@ npm run dev
 
 The frontend will be available at `http://localhost:5173`.
 API calls are proxied to `http://localhost:8000` automatically.
+
+---
+
+## Freeing Ports
+
+If you need to kill a server that's already occupying a port:
+
+```bash
+# Kill backend (port 8000)
+lsof -tiTCP:8000 -sTCP:LISTEN | xargs kill -9
+
+# Kill frontend (port 5173)
+lsof -tiTCP:5173 -sTCP:LISTEN | xargs kill -9
+
+# Kill both at once
+lsof -tiTCP:8000 -tiTCP:5173 -sTCP:LISTEN | xargs kill -9
+```
 
 ---
 
